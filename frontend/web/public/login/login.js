@@ -1,9 +1,9 @@
 (function () {
-  console.log('Login script loaded');
+  console.log("Login script loaded");
   const btn = document.getElementById("google-signin");
-  console.log('Button found:', btn);
+  console.log("Button found:", btn);
   if (!btn) {
-    console.error('Button with ID google-signin not found!');
+    console.error("Button with ID google-signin not found!");
     return;
   }
 
@@ -13,22 +13,34 @@
 
     if (event.data.type === "AUTH_SUCCESS") {
       console.log("Auth success received:", event.data.token);
-      // Redirect to dashboard
-      window.location.href = "/dashboard.html";
+
+      // Redirect based on role
+      const role = event.data.role || "controller";
+      if (role === "controller") {
+        window.location.href =
+          "/dashboards/controller/controller-dashboard.html";
+      } else {
+        window.location.href = "/dashboards/host/host-dashboard.html";
+      }
     }
   });
 
   btn.addEventListener("click", function (event) {
-    console.log('BUTTON CLICKED!', event);
+    console.log("BUTTON CLICKED!", event);
     console.log("Sign in with Google clicked");
+
+    // Get selected role
+    const selectedRole = document.querySelector('input[name="role"]:checked');
+    const role = selectedRole ? selectedRole.value : "controller";
+    console.log("Selected role:", role);
 
     // Disable button during auth
     btn.disabled = true;
     btn.innerHTML = "<span>Signing in...</span>";
 
-    // Professional popup OAuth
+    // Professional popup OAuth with role
     const popup = window.open(
-      "http://localhost:8081/auth/google",
+      `http://localhost:8081/auth/google?role=${role}`,
       "google-signin",
       "width=500,height=650,left=" +
         (screen.width / 2 - 250) +
@@ -55,8 +67,18 @@
           urlParams.get("token") || localStorage.getItem("auth_token");
 
         if (token) {
-          // Success! Redirect to dashboard
-          window.location.href = "/dashboard.html";
+          // Success! Redirect based on role
+          const selectedRole = document.querySelector(
+            'input[name="role"]:checked'
+          );
+          const role = selectedRole ? selectedRole.value : "controller";
+
+          if (role === "controller") {
+            window.location.href =
+              "/dashboards/controller/controller-dashboard.html";
+          } else {
+            window.location.href = "/dashboards/host/host-dashboard.html";
+          }
         } else {
           // Auth failed or cancelled
           resetButton();

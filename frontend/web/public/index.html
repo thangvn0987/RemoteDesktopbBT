@@ -3,20 +3,205 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Ephemeral Remote Control</title>
+    <title>Ephemeral Remote Control - Demo Portal</title>
+    <style>
+      :root {
+        --bg: #0b1020;
+        --panel: #121a33;
+        --text: #e9eef9;
+        --muted: #a8b2d1;
+        --accent: #4285f4;
+        --border: rgba(255, 255, 255, 0.1);
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        margin: 0;
+        padding: 40px;
+        background: radial-gradient(
+            1200px 800px at 80% -20%,
+            #1b2450,
+            transparent 60%
+          ),
+          var(--bg);
+        color: var(--text);
+        font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial,
+          sans-serif;
+        min-height: 100vh;
+      }
+
+      .container {
+        max-width: 800px;
+        margin: 0 auto;
+      }
+
+      h1 {
+        text-align: center;
+        font-size: 2.5rem;
+        margin-bottom: 1rem;
+        background: linear-gradient(135deg, var(--accent), #34d399);
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+        background-clip: text;
+      }
+
+      .subtitle {
+        text-align: center;
+        color: var(--muted);
+        font-size: 1.1rem;
+        margin-bottom: 3rem;
+      }
+
+      .demo-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+        gap: 24px;
+        margin-bottom: 3rem;
+      }
+
+      .demo-card {
+        background: linear-gradient(
+          180deg,
+          rgba(255, 255, 255, 0.04),
+          rgba(255, 255, 255, 0.02)
+        );
+        border: 1px solid var(--border);
+        border-radius: 16px;
+        padding: 24px;
+        transition: all 0.2s ease;
+      }
+
+      .demo-card:hover {
+        border-color: rgba(66, 133, 244, 0.3);
+        box-shadow: 0 8px 32px rgba(0, 0, 0, 0.2);
+        transform: translateY(-2px);
+      }
+
+      .demo-card h3 {
+        margin: 0 0 12px;
+        font-size: 1.25rem;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+      }
+
+      .demo-card p {
+        color: var(--muted);
+        margin: 0 0 20px;
+        line-height: 1.5;
+      }
+
+      .demo-btn {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        padding: 12px 20px;
+        background: var(--accent);
+        color: white;
+        border: none;
+        border-radius: 8px;
+        text-decoration: none;
+        font-weight: 600;
+        transition: all 0.2s ease;
+        width: 100%;
+        justify-content: center;
+      }
+
+      .demo-btn:hover {
+        background: #3367d6;
+        transform: translateY(-1px);
+        box-shadow: 0 4px 12px rgba(66, 133, 244, 0.3);
+      }
+
+      .demo-btn.secondary {
+        background: transparent;
+        border: 2px solid var(--accent);
+        color: var(--accent);
+      }
+
+      .demo-btn.secondary:hover {
+        background: var(--accent);
+        color: white;
+      }
+
+      .info-section {
+        text-align: center;
+        margin-top: 3rem;
+        padding: 24px;
+        background: rgba(255, 255, 255, 0.02);
+        border: 1px solid var(--border);
+        border-radius: 12px;
+      }
+
+      .info-section h3 {
+        margin: 0 0 16px;
+        color: var(--accent);
+      }
+
+      .info-section p {
+        color: var(--muted);
+        margin: 0;
+        line-height: 1.6;
+      }
+    </style>
   </head>
   <body>
-    <h1>Remote Desktop Web Portal</h1>
-    <nav>
-      <ul>
-        <li><a href="/login/login.html">Login</a></li>
-        <li><a href="#dashboard">Dashboard (Coming Soon)</a></li>
-        <li><a href="#sessions">Sessions (Coming Soon)</a></li>
-      </ul>
-    </nav>
-    <p>
-      Welcome to the operator portal. Please
-      <a href="/login/login.html">sign in</a> to continue.
-    </p>
+    <div class="container">
+      <h1>🎮 Remote Desktop Web Portal</h1>
+      <p class="subtitle">Frontend Demo & Development Portal</p>
+
+      <div class="demo-grid">
+        <!-- Login Page -->
+        <div class="demo-card">
+          <h3>🔐 Login Page</h3>
+          <p>
+            Authentication page with Google OAuth integration and role selection
+            (Controller/Host).
+          </p>
+          <a href="/login/login.html" class="demo-btn">View Login Page</a>
+        </div>
+
+        <!-- Controller Dashboard -->
+        <div class="demo-card">
+          <h3>🎮 Controller Dashboard</h3>
+          <p>
+            Dashboard for users who want to control other computers. Manage
+            hosts, start sessions.
+          </p>
+          <a
+            href="/dashboards/controller/controller-dashboard.html"
+            class="demo-btn"
+            >View Controller Dashboard</a
+          >
+        </div>
+
+        <!-- Host Dashboard -->
+        <div class="demo-card">
+          <h3>🖥️ Host Dashboard</h3>
+          <p>
+            Dashboard for users who allow others to control their computers.
+            Manage requests and controllers.
+          </p>
+          <a
+            href="/dashboards/host/host-dashboard.html"
+            class="demo-btn"
+            >View Host Dashboard</a
+          >
+        </div>
+      </div>
+
+      <div class="info-section">
+        <h3>🚀 Development Info</h3>
+        <p>
+          This is a frontend development portal for the Ephemeral Remote Control
+          project. Each page represents a different user interface component
+          that will be integrated with the backend services for authentication,
+          session management, and remote control functionality.
+        </p>
+      </div>
+    </div>
   </body>
 </html>

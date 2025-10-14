@@ -1,0 +1,120 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Ephemeral Remote Control - Controller Dashboard</title>
+    <link rel="stylesheet" href="./controller-dashboard.css" />
+  </head>
+  <body>
+    <!-- Header -->
+    <header class="header">
+      <div class="header-content">
+        <div class="logo-section">
+          <h1>🎮 Controller Dashboard</h1>
+        </div>
+
+        <div class="profile-section">
+          <div class="profile-info">
+            <img
+              src="https://via.placeholder.com/40"
+              alt="Profile"
+              class="profile-avatar"
+            />
+            <div class="profile-details">
+              <div class="profile-name">John Doe</div>
+              <div class="profile-role">Controller</div>
+            </div>
+          </div>
+
+          <div class="dropdown">
+            <button class="dropdown-btn" id="profile-menu">⚙️</button>
+            <div class="dropdown-content" id="dropdown-menu">
+              <a href="#" id="switch-role">Switch to Host Mode</a>
+              <a href="#" id="settings">Settings</a>
+              <a href="#" id="logout">Logout</a>
+            </div>
+          </div>
+        </div>
+      </div>
+    </header>
+
+    <!-- Main Content -->
+    <main class="main-content">
+      <div class="container">
+        <!-- Add New Host Section -->
+        <section class="add-host-section">
+          <button class="add-host-btn" id="add-host-btn">
+            <span class="add-icon">+</span>
+            <span>Add New Host</span>
+          </button>
+        </section>
+
+        <!-- Hosts List -->
+        <section class="hosts-section">
+          <h2>Available Hosts</h2>
+
+          <div class="hosts-grid" id="hosts-grid">
+            <!-- Loading state -->
+            <div class="loading-state" id="loading-state">
+              <div class="loading-spinner">�</div>
+              <p>Loading hosts...</p>
+            </div>
+          </div>
+
+          <!-- Empty State -->
+          <div class="empty-state" id="empty-state" style="display: none">
+            <div class="empty-icon">🖥️</div>
+            <h3>No hosts available</h3>
+            <p>Add hosts to start controlling remote computers</p>
+            <button class="add-host-btn secondary">Add Your First Host</button>
+          </div>
+        </section>
+      </div>
+    </main>
+
+    <!-- Add Host Modal -->
+    <div class="modal" id="add-host-modal">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h3>Add New Host</h3>
+          <button class="close-btn" id="close-modal">&times;</button>
+        </div>
+
+        <div class="modal-body">
+          <form id="add-host-form">
+            <div class="form-group">
+              <label for="host-email">Host Email Address</label>
+              <input
+                type="email"
+                id="host-email"
+                placeholder="Enter host's email address"
+                required
+              />
+            </div>
+
+            <div class="form-group">
+              <label for="host-message">Invitation Message (Optional)</label>
+              <textarea
+                id="host-message"
+                placeholder="Hi! I'd like to add you as a host for remote control sessions."
+                rows="3"
+              ></textarea>
+            </div>
+          </form>
+        </div>
+
+        <div class="modal-footer">
+          <button type="button" class="cancel-btn" id="cancel-btn">
+            Cancel
+          </button>
+          <button type="submit" class="submit-btn" form="add-host-form">
+            Send Invitation
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <script src="./controller-dashboard.js"></script>
+  </body>
+</html>

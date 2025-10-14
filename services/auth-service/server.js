@@ -194,6 +194,305 @@ app.post("/auth/logout", async (req, res) => {
   res.json({ success: true });
 });
 
+// Middleware to verify JWT token
+const verifyToken = async (req, res, next) => {
+  const token = req.headers.authorization?.replace("Bearer ", "");
+
+  if (!token) {
+    return res.status(401).json({ error: "No token provided" });
+  }
+
+  try {
+    const decoded = jwt.verify(
+      token,
+      process.env.AUTH_JWT_SECRET || "dev-secret"
+    );
+
+    // Verify session in database
+    const sessionResult = await pool.query(
+      "SELECT u.* FROM users u JOIN user_sessions s ON u.user_id = s.user_id WHERE s.session_token = $1 AND s.expires_at > NOW()",
+      [token]
+    );
+
+    if (sessionResult.rows.length === 0) {
+      return res.status(401).json({ error: "Invalid or expired token" });
+    }
+
+    req.user = sessionResult.rows[0];
+    next();
+  } catch (error) {
+    console.error("Token verification error:", error);
+    return res.status(401).json({ error: "Invalid token" });
+  }
+};
+
+// Get user's host relationships
+app.get("/api/hosts", verifyToken, async (req, res) => {
+  try {
+    const userId = req.user.user_id;
+
+    // Get hosts that this user can control
+    const hostsResult = await pool.query(
+      `
+      SELECT 
+        u.user_id,
+        u.google_id,
+        u.display_name,
+        u.email,
+        u.profile_image,
+        hr.relationship_id,
+        hr.status,
+        hr.created_at as relationship_created,
+        CASE 
+          WHEN us.user_id IS NOT NULL AND us.expires_at > NOW() THEN 'online'
+          ELSE 'offline'
+        END as online_status
+      FROM host_relationships hr
+      JOIN users u ON hr.host_user_id = u.user_id
+      LEFT JOIN user_sessions us ON u.user_id = us.user_id
+      WHERE hr.controller_user_id = $1 AND hr.status = 'active'
+      ORDER BY u.display_name ASC
+    `,
+      [userId]
+    );
+
+    res.json({
+      success: true,
+      hosts: hostsResult.rows,
+    });
+  } catch (error) {
+    console.error("Get hosts error:", error);
+    res.status(500).json({ error: "Failed to fetch hosts" });
+  }
+});
+
+// Add new host relationship
+app.post("/api/hosts", verifyToken, async (req, res) => {
+  try {
+    const controllerId = req.user.user_id;
+    const { email, message } = req.body;
+
+    if (!email) {
+      return res.status(400).json({ error: "Email is required" });
+    }
+
+    // Find host user by email
+    const hostResult = await pool.query(
+      "SELECT user_id FROM users WHERE email = $1",
+      [email]
+    );
+
+    if (hostResult.rows.length === 0) {
+      return res.status(404).json({ error: "User not found with this email" });
+    }
+
+    const hostId = hostResult.rows[0].user_id;
+
+    // Check if relationship already exists
+    const existingResult = await pool.query(
+      "SELECT * FROM host_relationships WHERE controller_user_id = $1 AND host_user_id = $2",
+      [controllerId, hostId]
+    );
+
+    if (existingResult.rows.length > 0) {
+      return res.status(400).json({ error: "Relationship already exists" });
+    }
+
+    // Create new relationship
+    const relationshipResult = await pool.query(
+      `
+      INSERT INTO host_relationships (controller_user_id, host_user_id, status, invitation_message)
+      VALUES ($1, $2, 'pending', $3)
+      RETURNING relationship_id
+    `,
+      [controllerId, hostId, message || null]
+    );
+
+    // TODO: Send notification to host user
+
+    res.json({
+      success: true,
+      message: "Invitation sent successfully",
+      relationship_id: relationshipResult.rows[0].relationship_id,
+    });
+  } catch (error) {
+    console.error("Add host error:", error);
+    res.status(500).json({ error: "Failed to add host" });
+  }
+});
+
+// Remove host relationship
+app.delete("/api/hosts/:relationshipId", verifyToken, async (req, res) => {
+  try {
+    const controllerId = req.user.user_id;
+    const relationshipId = req.params.relationshipId;
+
+    // Verify ownership and delete
+    const result = await pool.query(
+      "DELETE FROM host_relationships WHERE relationship_id = $1 AND controller_user_id = $2 RETURNING *",
+      [relationshipId, controllerId]
+    );
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: "Relationship not found" });
+    }
+
+    res.json({
+      success: true,
+      message: "Host relationship removed successfully",
+    });
+  } catch (error) {
+    console.error("Remove host error:", error);
+    res.status(500).json({ error: "Failed to remove host" });
+  }
+});
+
+// ========== HOST ENDPOINTS ==========
+
+// Get pending connection requests for host
+app.get("/api/host/requests", verifyToken, async (req, res) => {
+  try {
+    const hostId = req.user.user_id;
+    
+    // Get pending requests where this user is the host
+    const requestsResult = await pool.query(`
+      SELECT 
+        u.user_id,
+        u.google_id,
+        u.display_name,
+        u.email,
+        u.profile_image,
+        hr.relationship_id,
+        hr.status,
+        hr.invitation_message,
+        hr.created_at
+      FROM host_relationships hr
+      JOIN users u ON hr.controller_user_id = u.user_id
+      WHERE hr.host_user_id = $1 AND hr.status = 'pending'
+      ORDER BY hr.created_at DESC
+    `, [hostId]);
+
+    res.json({
+      success: true,
+      requests: requestsResult.rows
+    });
+  } catch (error) {
+    console.error("Get host requests error:", error);
+    res.status(500).json({ error: "Failed to fetch requests" });
+  }
+});
+
+// Get active controllers for host
+app.get("/api/host/controllers", verifyToken, async (req, res) => {
+  try {
+    const hostId = req.user.user_id;
+    
+    // Get active controllers for this host
+    const controllersResult = await pool.query(`
+      SELECT 
+        u.user_id,
+        u.google_id,
+        u.display_name,
+        u.email,
+        u.profile_image,
+        hr.relationship_id,
+        hr.status,
+        hr.created_at,
+        hr.updated_at
+      FROM host_relationships hr
+      JOIN users u ON hr.controller_user_id = u.user_id
+      WHERE hr.host_user_id = $1 AND hr.status = 'active'
+      ORDER BY u.display_name ASC
+    `, [hostId]);
+
+    res.json({
+      success: true,
+      controllers: controllersResult.rows
+    });
+  } catch (error) {
+    console.error("Get host controllers error:", error);
+    res.status(500).json({ error: "Failed to fetch controllers" });
+  }
+});
+
+// Accept connection request
+app.post("/api/host/requests/:relationshipId/accept", verifyToken, async (req, res) => {
+  try {
+    const hostId = req.user.user_id;
+    const relationshipId = req.params.relationshipId;
+
+    // Update relationship status to active
+    const result = await pool.query(
+      "UPDATE host_relationships SET status = 'active', updated_at = NOW() WHERE relationship_id = $1 AND host_user_id = $2 AND status = 'pending' RETURNING *",
+      [relationshipId, hostId]
+    );
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: "Request not found or already processed" });
+    }
+
+    res.json({
+      success: true,
+      message: "Request accepted successfully"
+    });
+  } catch (error) {
+    console.error("Accept request error:", error);
+    res.status(500).json({ error: "Failed to accept request" });
+  }
+});
+
+// Reject connection request
+app.post("/api/host/requests/:relationshipId/reject", verifyToken, async (req, res) => {
+  try {
+    const hostId = req.user.user_id;
+    const relationshipId = req.params.relationshipId;
+
+    // Update relationship status to rejected
+    const result = await pool.query(
+      "UPDATE host_relationships SET status = 'rejected', updated_at = NOW() WHERE relationship_id = $1 AND host_user_id = $2 AND status = 'pending' RETURNING *",
+      [relationshipId, hostId]
+    );
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: "Request not found or already processed" });
+    }
+
+    res.json({
+      success: true,
+      message: "Request rejected successfully"
+    });
+  } catch (error) {
+    console.error("Reject request error:", error);
+    res.status(500).json({ error: "Failed to reject request" });
+  }
+});
+
+// Revoke controller access
+app.delete("/api/host/controllers/:relationshipId", verifyToken, async (req, res) => {
+  try {
+    const hostId = req.user.user_id;
+    const relationshipId = req.params.relationshipId;
+
+    // Delete or update relationship
+    const result = await pool.query(
+      "DELETE FROM host_relationships WHERE relationship_id = $1 AND host_user_id = $2 RETURNING *",
+      [relationshipId, hostId]
+    );
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: "Controller relationship not found" });
+    }
+
+    res.json({
+      success: true,
+      message: "Controller access revoked successfully"
+    });
+  } catch (error) {
+    console.error("Revoke controller error:", error);
+    res.status(500).json({ error: "Failed to revoke access" });
+  }
+});
+
 app.listen(PORT, () => {
   console.log(`Auth service running on port ${PORT}`);
 });
