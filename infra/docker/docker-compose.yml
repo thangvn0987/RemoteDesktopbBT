@@ -1,0 +1,91 @@
+version: "3.9"
+
+services:
+  web-portal:
+    build: ../../frontend/web
+    image: remotebt/web-portal:dev
+    ports:
+      - "3000:80"
+    env_file:
+      - ./.env
+    environment:
+      - NODE_ENV=development
+    depends_on:
+      - signaling
+      - auth
+      - session
+
+  signaling:
+    build: ../../services/signaling-service
+    image: remotebt/signaling:dev
+    ports:
+      - "8080:8080"
+    env_file:
+      - ./.env
+
+  auth:
+    build: ../../services/auth-service
+    image: remotebt/auth:dev
+    ports:
+      - "8081:8081"
+    env_file:
+      - ./.env
+
+  session:
+    build: ../../services/session-service
+    image: remotebt/session:dev
+    ports:
+      - "8082:8082"
+    env_file:
+      - ./.env
+
+  audit:
+    build: ../../services/audit-service
+    image: remotebt/audit:dev
+    ports:
+      - "8083:8083"
+    env_file:
+      - ./.env
+
+  redis:
+    image: redis:7-alpine
+    container_name: redis
+    ports:
+      - "6379:6379"
+    command: ["redis-server", "--appendonly", "yes"]
+    volumes:
+      - redis_data:/data
+    env_file:
+      - ./.env
+
+  postgres:
+    image: postgres:16-alpine
+    container_name: postgres
+    ports:
+      - "5432:5432"
+    environment:
+      - POSTGRES_DB=${POSTGRES_DB}
+      - POSTGRES_USER=${POSTGRES_USER}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
+    volumes:
+      - pg_data:/var/lib/postgresql/data
+    env_file:
+      - ./.env
+
+  # turn:
+  #   image: instrumentisto/coturn
+  #   container_name: turn
+  #   ports:
+  #     - "3478:3478/udp"
+  #     - "5349:5349/tcp"
+  #   env_file:
+  #     - ./.env
+  #   command: ["-n", "--log-file=stdout", "--min-port=49160", "--max-port=49200"]
+
+networks:
+  default:
+    name: remotebt_net
+
+volumes:
+  redis_data:
+  pg_data:

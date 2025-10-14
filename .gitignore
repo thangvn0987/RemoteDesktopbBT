@@ -1,0 +1,25 @@
+# General
+.DS_Store
+Thumbs.db
+*.log
+logs/
+.tmp/
+
+# Node
+node_modules/
+.npm/
+
+# Env
+.env
+infra/docker/.env
+
+# Build artifacts
+build/
+dist/
+.out/
+.next/
+coverage/
+
+# IDE
+.vscode/
+.idea/
