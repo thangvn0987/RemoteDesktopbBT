@@ -33,8 +33,8 @@ CREATE TABLE remote_sessions (
 -- Host relationships (controller-host pairs)
 CREATE TABLE host_relationships (
     relationship_id SERIAL PRIMARY KEY,
-    controller_user_id INTEGER REFERENCES users(user_id) NOT NULL,
-    host_user_id INTEGER REFERENCES users(user_id) NOT NULL,
+    controller_user_id INTEGER REFERENCES users(id) NOT NULL,
+    host_user_id INTEGER REFERENCES users(id) NOT NULL,
     status VARCHAR(20) DEFAULT 'pending' CHECK (status IN ('pending', 'active', 'rejected', 'blocked')),
     invitation_message TEXT,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
@@ -45,7 +45,7 @@ CREATE TABLE host_relationships (
 -- Audit logs
 CREATE TABLE audit_logs (
     id SERIAL PRIMARY KEY,
-    user_id INTEGER REFERENCES users(user_id),
+    user_id INTEGER REFERENCES users(id),
     remote_session_id INTEGER REFERENCES remote_sessions(id),
     action VARCHAR(100) NOT NULL,
     details JSONB,
@@ -64,7 +64,7 @@ CREATE INDEX idx_host_relationships_host ON host_relationships(host_user_id);
 CREATE INDEX idx_audit_logs_user ON audit_logs(user_id);
 
 -- Insert sample data for development
-INSERT INTO users (google_id, display_name, email, profile_image) VALUES
+INSERT INTO users (google_id, name, email, avatar_url) VALUES
 ('demo_controller_123', 'John Controller', 'john.controller@example.com', 'https://via.placeholder.com/100'),
 ('demo_host_alice_456', 'Alice Smith', 'alice@example.com', 'https://via.placeholder.com/100'),
 ('demo_host_bob_789', 'Bob Johnson', 'bob@example.com', 'https://via.placeholder.com/100'),
@@ -72,26 +72,26 @@ INSERT INTO users (google_id, display_name, email, profile_image) VALUES
 
 -- Create host relationships
 INSERT INTO host_relationships (controller_user_id, host_user_id, status, invitation_message) VALUES
-((SELECT user_id FROM users WHERE email = 'john.controller@example.com'), 
- (SELECT user_id FROM users WHERE email = 'alice@example.com'), 'active', 'Hi Alice! I would like to add you as a host for remote control sessions.'),
-((SELECT user_id FROM users WHERE email = 'john.controller@example.com'), 
- (SELECT user_id FROM users WHERE email = 'bob@example.com'), 'active', NULL),
-((SELECT user_id FROM users WHERE email = 'john.controller@example.com'), 
- (SELECT user_id FROM users WHERE email = 'carol@example.com'), 'active', 'Hi Carol! Can I add you to my remote control list?');
+((SELECT id FROM users WHERE email = 'john.controller@example.com'), 
+ (SELECT id FROM users WHERE email = 'alice@example.com'), 'active', 'Hi Alice! I would like to add you as a host for remote control sessions.'),
+((SELECT id FROM users WHERE email = 'john.controller@example.com'), 
+ (SELECT id FROM users WHERE email = 'bob@example.com'), 'active', NULL),
+((SELECT id FROM users WHERE email = 'john.controller@example.com'), 
+ (SELECT id FROM users WHERE email = 'carol@example.com'), 'active', 'Hi Carol! Can I add you to my remote control list?');
 
 -- Add some pending requests for demo (reverse relationships for host dashboard)
-INSERT INTO users (google_id, display_name, email, profile_image) VALUES
+INSERT INTO users (google_id, name, email, avatar_url) VALUES
 ('demo_controller_sarah_202', 'Sarah Controller', 'sarah.controller@example.com', 'https://via.placeholder.com/100'),
 ('demo_controller_mike_303', 'Mike Johnson', 'mike.controller@example.com', 'https://via.placeholder.com/100');
 
 -- Pending requests for Alice (when she logs in as host)
 INSERT INTO host_relationships (controller_user_id, host_user_id, status, invitation_message) VALUES
-((SELECT user_id FROM users WHERE email = 'sarah.controller@example.com'), 
- (SELECT user_id FROM users WHERE email = 'alice@example.com'), 'pending', 'Hi Alice! I need to remotely assist you with some technical issues. Would you allow me access?'),
-((SELECT user_id FROM users WHERE email = 'mike.controller@example.com'), 
- (SELECT user_id FROM users WHERE email = 'alice@example.com'), 'pending', 'Hello! I would like to help you with your computer setup.');
+((SELECT id FROM users WHERE email = 'sarah.controller@example.com'), 
+ (SELECT id FROM users WHERE email = 'alice@example.com'), 'pending', 'Hi Alice! I need to remotely assist you with some technical issues. Would you allow me access?'),
+((SELECT id FROM users WHERE email = 'mike.controller@example.com'), 
+ (SELECT id FROM users WHERE email = 'alice@example.com'), 'pending', 'Hello! I would like to help you with your computer setup.');
 
 -- Create some active sessions to show online status
 INSERT INTO user_sessions (user_id, session_token, expires_at) VALUES
-((SELECT user_id FROM users WHERE email = 'alice@example.com'), 'demo_alice_session', NOW() + INTERVAL '1 hour'),
-((SELECT user_id FROM users WHERE email = 'carol@example.com'), 'demo_carol_session', NOW() + INTERVAL '1 hour');
+((SELECT id FROM users WHERE email = 'alice@example.com'), 'demo_alice_session', NOW() + INTERVAL '1 hour'),
+((SELECT id FROM users WHERE email = 'carol@example.com'), 'demo_carol_session', NOW() + INTERVAL '1 hour');

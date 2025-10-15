@@ -18,8 +18,10 @@ const pool = new Pool({
 // Middleware
 app.use(
   cors({
-    origin: "http://localhost:3000",
+    origin: ["http://localhost:3000", "http://127.0.0.1:3000"],
     credentials: true,
+    methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+    allowedHeaders: ["Content-Type", "Authorization"],
   })
 );
 app.use(express.json());
@@ -267,7 +269,10 @@ const verifyToken = async (req, res, next) => {
 
     // Verify session in database
     const sessionResult = await pool.query(
-      "SELECT u.* FROM users u JOIN user_sessions s ON u.id = s.user_id WHERE s.session_token = $1 AND s.expires_at > NOW()",
+      `SELECT u.id, u.google_id, u.email, u.name, u.avatar_url
+       FROM users u 
+       JOIN user_sessions s ON u.id = s.user_id 
+       WHERE s.session_token = $1 AND s.expires_at > NOW()`,
       [token]
     );
 
@@ -286,17 +291,17 @@ const verifyToken = async (req, res, next) => {
 // Get user's host relationships
 app.get("/api/hosts", verifyToken, async (req, res) => {
   try {
-    const userId = req.user.user_id;
+    const userId = req.user.id;
 
     // Get hosts that this user can control
     const hostsResult = await pool.query(
       `
       SELECT 
-        u.user_id,
+        u.id AS user_id,
         u.google_id,
-        u.display_name,
+        u.name AS display_name,
         u.email,
-        u.profile_image,
+        u.avatar_url AS profile_image,
         hr.relationship_id,
         hr.status,
         hr.created_at as relationship_created,
@@ -305,10 +310,10 @@ app.get("/api/hosts", verifyToken, async (req, res) => {
           ELSE 'offline'
         END as online_status
       FROM host_relationships hr
-      JOIN users u ON hr.host_user_id = u.user_id
-      LEFT JOIN user_sessions us ON u.user_id = us.user_id
+      JOIN users u ON hr.host_user_id = u.id
+      LEFT JOIN user_sessions us ON u.id = us.user_id
       WHERE hr.controller_user_id = $1 AND hr.status = 'active'
-      ORDER BY u.display_name ASC
+      ORDER BY u.name ASC
     `,
       [userId]
     );
@@ -326,7 +331,7 @@ app.get("/api/hosts", verifyToken, async (req, res) => {
 // Add new host relationship
 app.post("/api/hosts", verifyToken, async (req, res) => {
   try {
-    const controllerId = req.user.user_id;
+    const controllerId = req.user.id;
     const { email, message } = req.body;
 
     if (!email) {
@@ -335,7 +340,7 @@ app.post("/api/hosts", verifyToken, async (req, res) => {
 
     // Find host user by email
     const hostResult = await pool.query(
-      "SELECT user_id FROM users WHERE email = $1",
+      "SELECT id FROM users WHERE email = $1",
       [email]
     );
 
@@ -343,7 +348,7 @@ app.post("/api/hosts", verifyToken, async (req, res) => {
       return res.status(404).json({ error: "User not found with this email" });
     }
 
-    const hostId = hostResult.rows[0].user_id;
+  const hostId = hostResult.rows[0].id;
 
     // Check if relationship already exists
     const existingResult = await pool.query(
@@ -381,7 +386,7 @@ app.post("/api/hosts", verifyToken, async (req, res) => {
 // Remove host relationship
 app.delete("/api/hosts/:relationshipId", verifyToken, async (req, res) => {
   try {
-    const controllerId = req.user.user_id;
+  const controllerId = req.user.id;
     const relationshipId = req.params.relationshipId;
 
     // Verify ownership and delete
@@ -409,23 +414,23 @@ app.delete("/api/hosts/:relationshipId", verifyToken, async (req, res) => {
 // Get pending connection requests for host
 app.get("/api/host/requests", verifyToken, async (req, res) => {
   try {
-    const hostId = req.user.user_id;
+    const hostId = req.user.id;
 
     // Get pending requests where this user is the host
     const requestsResult = await pool.query(
       `
       SELECT 
-        u.user_id,
+        u.id AS user_id,
         u.google_id,
-        u.display_name,
+        u.name AS display_name,
         u.email,
-        u.profile_image,
+        u.avatar_url AS profile_image,
         hr.relationship_id,
         hr.status,
         hr.invitation_message,
         hr.created_at
       FROM host_relationships hr
-      JOIN users u ON hr.controller_user_id = u.user_id
+      JOIN users u ON hr.controller_user_id = u.id
       WHERE hr.host_user_id = $1 AND hr.status = 'pending'
       ORDER BY hr.created_at DESC
     `,
@@ -445,25 +450,25 @@ app.get("/api/host/requests", verifyToken, async (req, res) => {
 // Get active controllers for host
 app.get("/api/host/controllers", verifyToken, async (req, res) => {
   try {
-    const hostId = req.user.user_id;
+    const hostId = req.user.id;
 
     // Get active controllers for this host
     const controllersResult = await pool.query(
       `
       SELECT 
-        u.user_id,
+        u.id AS user_id,
         u.google_id,
-        u.display_name,
+        u.name AS display_name,
         u.email,
-        u.profile_image,
+        u.avatar_url AS profile_image,
         hr.relationship_id,
         hr.status,
         hr.created_at,
         hr.updated_at
       FROM host_relationships hr
-      JOIN users u ON hr.controller_user_id = u.user_id
+      JOIN users u ON hr.controller_user_id = u.id
       WHERE hr.host_user_id = $1 AND hr.status = 'active'
-      ORDER BY u.display_name ASC
+      ORDER BY u.name ASC
     `,
       [hostId]
     );
@@ -484,7 +489,7 @@ app.post(
   verifyToken,
   async (req, res) => {
     try {
-      const hostId = req.user.user_id;
+      const hostId = req.user.id;
       const relationshipId = req.params.relationshipId;
 
       // Update relationship status to active
@@ -516,7 +521,7 @@ app.post(
   verifyToken,
   async (req, res) => {
     try {
-      const hostId = req.user.user_id;
+      const hostId = req.user.id;
       const relationshipId = req.params.relationshipId;
 
       // Update relationship status to rejected
@@ -548,7 +553,7 @@ app.delete(
   verifyToken,
   async (req, res) => {
     try {
-      const hostId = req.user.user_id;
+      const hostId = req.user.id;
       const relationshipId = req.params.relationshipId;
 
       // Delete or update relationship

@@ -43,8 +43,17 @@
   document.getElementById("logout").addEventListener("click", function (e) {
     e.preventDefault();
     console.log("Logout clicked");
-    // TODO: Implement logout
+    // Implement logout
     if (confirm("Are you sure you want to logout?")) {
+      const token = localStorage.getItem("auth_token");
+      // Fire and forget logout API
+      if (token) {
+        fetch("http://localhost:8081/auth/logout", {
+          method: "POST",
+          headers: { Authorization: `Bearer ${token}` },
+        }).catch(() => {});
+      }
+      localStorage.removeItem("auth_token");
       window.location.href = "/login/login.html";
     }
   });
@@ -301,6 +310,39 @@
     }
   }
 
+  // Load current user profile and update header UI
+  async function loadUserProfile() {
+    console.log("Loading user profile...");
+    try {
+      const token = localStorage.getItem("auth_token");
+      if (!token) throw new Error("No auth token");
+
+      const res = await fetch("http://localhost:8081/auth/verify", {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const data = await res.json();
+      const user = data.user || {};
+
+      // Update header UI
+      const avatarEl = document.querySelector(".profile-avatar");
+      const nameEl = document.querySelector(".profile-name");
+      const roleEl = document.querySelector(".profile-role");
+
+      if (avatarEl)
+        avatarEl.src = user.avatar_url || "https://via.placeholder.com/40";
+      if (nameEl) nameEl.textContent = user.name || user.email || "User";
+      if (roleEl) roleEl.textContent = "Controller";
+    } catch (err) {
+      console.warn("Failed to load user profile:", err);
+      // If token invalid, redirect to login
+      if (String(err).includes("401") || String(err).includes("No auth token")) {
+        window.location.href = "/login/login.html";
+      }
+    }
+  }
+
   // Render hosts data
   function renderHosts(hosts) {
     console.log("Rendering hosts:", hosts.length);
@@ -362,6 +404,7 @@
   // Initialize
   function init() {
     console.log("Initializing Controller Dashboard...");
+    loadUserProfile();
     loadHosts();
 
     // Check authentication
