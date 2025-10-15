@@ -13,16 +13,20 @@
         <div class="logo-section">
           <h1>🖥️ Host Dashboard</h1>
         </div>
-        
+
         <div class="profile-section">
           <div class="profile-info">
-            <img src="https://via.placeholder.com/40" alt="Profile" class="profile-avatar" />
+            <img
+              src="https://via.placeholder.com/40"
+              alt="Profile"
+              class="profile-avatar"
+            />
             <div class="profile-details">
               <div class="profile-name">Jane Host</div>
               <div class="profile-role">Host</div>
             </div>
           </div>
-          
+
           <div class="dropdown">
             <button class="dropdown-btn" id="profile-menu">⚙️</button>
             <div class="dropdown-content" id="dropdown-menu">
@@ -38,7 +42,6 @@
     <!-- Main Content -->
     <main class="main-content">
       <div class="container">
-        
         <!-- Pending Requests Section -->
         <section class="requests-section">
           <h2>Connection Requests</h2>
@@ -49,12 +52,15 @@
               <p>Loading requests...</p>
             </div>
           </div>
-          
+
           <!-- Empty state for requests -->
-          <div class="empty-state" id="requests-empty" style="display: none;">
+          <div class="empty-state" id="requests-empty" style="display: none">
             <div class="empty-icon">📭</div>
             <h3>No pending requests</h3>
-            <p>When someone wants to control your computer, their requests will appear here</p>
+            <p>
+              When someone wants to control your computer, their requests will
+              appear here
+            </p>
           </div>
         </section>
 
@@ -70,7 +76,7 @@
           </div>
 
           <!-- Empty state for controllers -->
-          <div class="empty-state" id="controllers-empty" style="display: none;">
+          <div class="empty-state" id="controllers-empty" style="display: none">
             <div class="empty-icon">🎮</div>
             <h3>No controllers yet</h3>
             <p>Controllers you've granted access to will appear here</p>

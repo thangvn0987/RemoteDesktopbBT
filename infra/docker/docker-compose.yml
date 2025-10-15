@@ -73,6 +73,20 @@ services:
     env_file:
       - ./.env
 
+  pgadmin:
+    image: dpage/pgadmin4:latest
+    container_name: pgadmin
+    ports:
+      - "8084:80"
+    environment:
+      - PGADMIN_DEFAULT_EMAIL=admin@admin.com
+      - PGADMIN_DEFAULT_PASSWORD=admin
+      - PGADMIN_CONFIG_SERVER_MODE=False
+    depends_on:
+      - postgres
+    volumes:
+      - pgadmin_data:/var/lib/pgadmin
+
   # turn:
   #   image: instrumentisto/coturn
   #   container_name: turn
@@ -90,3 +104,4 @@ networks:
 volumes:
   redis_data:
   pg_data:
+  pgadmin_data:

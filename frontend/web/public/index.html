@@ -153,6 +153,114 @@
       <h1>🎮 Remote Desktop Web Portal</h1>
       <p class="subtitle">Frontend Demo & Development Portal</p>
 
+      <!-- DEBUG TOKEN SECTION -->
+      <div
+        style="
+          background: #1e3a8a;
+          padding: 20px;
+          border-radius: 12px;
+          margin-bottom: 30px;
+          border: 2px solid #3b82f6;
+        "
+      >
+        <h2 style="color: #60a5fa; margin-bottom: 15px">
+          🔧 DEBUG MODE - Auth Token Status
+        </h2>
+        <div id="token-info">
+          <p>
+            <span style="color: #fbbf24">Status:</span>
+            <span id="token-status" style="color: #ef4444; font-weight: bold"
+              >Loading...</span
+            >
+          </p>
+          <p>
+            <span style="color: #fbbf24">Domain:</span>
+            <span id="current-domain" style="color: #10b981">-</span>
+          </p>
+          <p>
+            <span style="color: #fbbf24">Token Length:</span>
+            <span id="token-length" style="color: #10b981">-</span>
+          </p>
+          <p><span style="color: #fbbf24">Token Preview:</span></p>
+          <textarea
+            id="token-display"
+            readonly
+            style="
+              width: 100%;
+              height: 80px;
+              font-family: 'Courier New', monospace;
+              font-size: 11px;
+              background: #1f2937;
+              color: #e5e7eb;
+              border: 1px solid #374151;
+              border-radius: 6px;
+              padding: 8px;
+              resize: vertical;
+            "
+          ></textarea>
+          <div
+            style="margin-top: 15px; display: flex; gap: 10px; flex-wrap: wrap"
+          >
+            <button
+              id="refresh-token"
+              style="
+                background: #3b82f6;
+                color: white;
+                padding: 8px 16px;
+                border: none;
+                border-radius: 6px;
+                cursor: pointer;
+                font-weight: 500;
+              "
+            >
+              🔄 Refresh
+            </button>
+            <button
+              id="go-controller"
+              style="
+                background: #10b981;
+                color: white;
+                padding: 8px 16px;
+                border: none;
+                border-radius: 6px;
+                cursor: pointer;
+                font-weight: 500;
+              "
+            >
+              🎮 Controller Dashboard
+            </button>
+            <button
+              id="go-host"
+              style="
+                background: #8b5cf6;
+                color: white;
+                padding: 8px 16px;
+                border: none;
+                border-radius: 6px;
+                cursor: pointer;
+                font-weight: 500;
+              "
+            >
+              🖥️ Host Dashboard
+            </button>
+            <button
+              id="clear-token"
+              style="
+                background: #ef4444;
+                color: white;
+                padding: 8px 16px;
+                border: none;
+                border-radius: 6px;
+                cursor: pointer;
+                font-weight: 500;
+              "
+            >
+              🗑️ Clear Token
+            </button>
+          </div>
+        </div>
+      </div>
+
       <div class="demo-grid">
         <!-- Login Page -->
         <div class="demo-card">
@@ -185,9 +293,7 @@
             Dashboard for users who allow others to control their computers.
             Manage requests and controllers.
           </p>
-          <a
-            href="/dashboards/host/host-dashboard.html"
-            class="demo-btn"
+          <a href="/dashboards/host/host-dashboard.html" class="demo-btn"
             >View Host Dashboard</a
           >
         </div>
@@ -203,5 +309,58 @@
         </p>
       </div>
     </div>
+
+    <script>
+      // Token Debug Functions
+      function updateTokenInfo() {
+        const token = localStorage.getItem("auth_token");
+        const statusEl = document.getElementById("token-status");
+        const domainEl = document.getElementById("current-domain");
+        const lengthEl = document.getElementById("token-length");
+        const displayEl = document.getElementById("token-display");
+
+        domainEl.textContent = window.location.origin;
+
+        if (token) {
+          statusEl.textContent = "✅ TOKEN FOUND";
+          statusEl.style.color = "#10b981";
+          lengthEl.textContent = token.length + " characters";
+          displayEl.value = token;
+        } else {
+          statusEl.textContent = "❌ NO TOKEN";
+          statusEl.style.color = "#ef4444";
+          lengthEl.textContent = "0 characters";
+          displayEl.value = "No token found in localStorage";
+        }
+      }
+
+      // Event Listeners
+      document
+        .getElementById("refresh-token")
+        .addEventListener("click", updateTokenInfo);
+
+      document.getElementById("go-controller").addEventListener("click", () => {
+        window.location.href =
+          "/dashboards/controller/controller-dashboard.html";
+      });
+
+      document.getElementById("go-host").addEventListener("click", () => {
+        window.location.href = "/dashboards/host/host-dashboard.html";
+      });
+
+      document.getElementById("clear-token").addEventListener("click", () => {
+        if (confirm("Are you sure you want to clear the auth token?")) {
+          localStorage.removeItem("auth_token");
+          updateTokenInfo();
+          alert("Token cleared successfully!");
+        }
+      });
+
+      // Initialize on page load
+      document.addEventListener("DOMContentLoaded", updateTokenInfo);
+
+      // Auto-refresh every 2 seconds
+      setInterval(updateTokenInfo, 2000);
+    </script>
   </body>
 </html>

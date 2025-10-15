@@ -448,23 +448,23 @@
   }
 
   // Initialize
-  //   function init() {
-  //     console.log('Initializing Host Dashboard...');
+    function init() {
+      console.log('Initializing Host Dashboard...');
 
-  //     // Check authentication
-  //     const token = localStorage.getItem('auth_token');
-  //     if (!token) {
-  //       console.log('No auth token found, redirecting to login...');
-  //       window.location.href = '/login/login.html';
-  //       return;
-  //     }
+      // Check authentication
+      const token = localStorage.getItem('auth_token');
+      if (!token) {
+        console.log('No auth token found, redirecting to login...');
+        window.location.href = '/login/login.html';
+        return;
+      }
 
-  //     // Load data
-  //     loadRequests();
-  //     loadControllers();
+      // Load data
+      loadRequests();
+      loadControllers();
 
-  //     console.log('Host Dashboard initialized successfully');
-  //   }
+      console.log('Host Dashboard initialized successfully');
+    }
 
   // Start the application
   init();

@@ -48,10 +48,16 @@ passport.use(
         const existing = await pool.query(userQuery, [profile.id]);
 
         if (existing.rows.length > 0) {
+          console.log("👤 Existing user found:", existing.rows[0]);
           return done(null, existing.rows[0]);
         }
 
         // Create new user
+        console.log("👤 Creating new user:", {
+          googleId: profile.id,
+          email: profile.emails[0].value,
+          name: profile.displayName,
+        });
         const insertQuery = `
       INSERT INTO users (google_id, email, name, avatar_url)
       VALUES ($1, $2, $3, $4)
@@ -64,6 +70,7 @@ passport.use(
           profile.photos[0].value,
         ]);
 
+        console.log("✅ User created successfully:", newUser.rows[0]);
         return done(null, newUser.rows[0]);
       } catch (error) {
         return done(error, null);
@@ -90,17 +97,30 @@ app.get("/health", (req, res) => {
 // Start Google OAuth
 app.get(
   "/auth/google",
+  (req, res, next) => {
+    console.log("🚀 /auth/google route called with query:", req.query);
+    console.log("🔗 Full URL:", req.originalUrl);
+    next();
+  },
   passport.authenticate("google", { scope: ["profile", "email"] })
 );
 
 // Google OAuth callback
 app.get(
   "/auth/google/callback",
+  (req, res, next) => {
+    console.log("📞 /auth/google/callback called with query:", req.query);
+    console.log("🔗 Full callback URL:", req.originalUrl);
+    next();
+  },
   passport.authenticate("google", {
     failureRedirect: "http://localhost:3000/login/login.html",
+    failureFlash: true,
   }),
   async (req, res) => {
     try {
+      console.log("🔐 Starting session creation for user:", req.user);
+
       // Create session token
       const sessionToken = jwt.sign(
         { userId: req.user.id, email: req.user.email },
@@ -108,34 +128,71 @@ app.get(
         { expiresIn: "24h" }
       );
 
+      console.log("✅ JWT token created successfully");
+
       // Save session to database
+      console.log("💾 Saving session to database...");
       const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000); // 24h
       await pool.query(
         "INSERT INTO user_sessions (user_id, session_token, expires_at) VALUES ($1, $2, $3)",
         [req.user.id, sessionToken, expiresAt]
       );
 
+      console.log("✅ Session saved to database successfully");
+
       // For popup flow: return HTML that closes popup and sends token to parent
+      console.log("📤 Sending HTML response with postMessage...");
       res.send(`
         <!DOCTYPE html>
         <html>
         <head><title>Authentication Success</title></head>
         <body>
           <script>
-            // Store token in parent window
+            console.log('Auth callback executed');
+            console.log('window.opener:', window.opener);
+            console.log('token:', '${sessionToken}');
+            
+            // Send token to parent via postMessage only (no direct localStorage access due to CORS)
             if (window.opener) {
-              window.opener.localStorage.setItem('auth_token', '${sessionToken}');
-              window.opener.postMessage({ type: 'AUTH_SUCCESS', token: '${sessionToken}' }, 'http://localhost:3000');
+              console.log('Sending postMessage to parent (localStorage will be set by parent)');
+              
+              // Try multiple approaches to ensure message delivery
+              try {
+                // Method 1: Specific origin
+                window.opener.postMessage({ 
+                  type: 'AUTH_SUCCESS', 
+                  token: '${sessionToken}' 
+                }, 'http://localhost:3000');
+                console.log('✅ PostMessage sent to localhost:3000');
+                
+                // Method 2: Wildcard origin as fallback
+                window.opener.postMessage({ 
+                  type: 'AUTH_SUCCESS', 
+                  token: '${sessionToken}' 
+                }, '*');
+                console.log('✅ PostMessage sent with wildcard origin');
+                
+              } catch (error) {
+                console.error('❌ PostMessage failed:', error);
+              }
+              
+              console.log('PostMessage sent, closing popup');
+            } else {
+              console.log('No window.opener found');
             }
-            // Close popup
-            window.close();
+            
+            // Close popup after small delay
+            setTimeout(() => {
+              console.log('Closing popup');
+              window.close();
+            }, 1000);
           </script>
           <p>Authentication successful. This window will close automatically.</p>
         </body>
         </html>
       `);
     } catch (error) {
-      console.error("Session creation error:", error);
+      console.error("❌ Session creation error:", error);
       res.redirect(
         "http://localhost:3000/login/login.html?error=session_failed"
       );
@@ -210,7 +267,7 @@ const verifyToken = async (req, res, next) => {
 
     // Verify session in database
     const sessionResult = await pool.query(
-      "SELECT u.* FROM users u JOIN user_sessions s ON u.user_id = s.user_id WHERE s.session_token = $1 AND s.expires_at > NOW()",
+      "SELECT u.* FROM users u JOIN user_sessions s ON u.id = s.user_id WHERE s.session_token = $1 AND s.expires_at > NOW()",
       [token]
     );
 
@@ -353,9 +410,10 @@ app.delete("/api/hosts/:relationshipId", verifyToken, async (req, res) => {
 app.get("/api/host/requests", verifyToken, async (req, res) => {
   try {
     const hostId = req.user.user_id;
-    
+
     // Get pending requests where this user is the host
-    const requestsResult = await pool.query(`
+    const requestsResult = await pool.query(
+      `
       SELECT 
         u.user_id,
         u.google_id,
@@ -370,11 +428,13 @@ app.get("/api/host/requests", verifyToken, async (req, res) => {
       JOIN users u ON hr.controller_user_id = u.user_id
       WHERE hr.host_user_id = $1 AND hr.status = 'pending'
       ORDER BY hr.created_at DESC
-    `, [hostId]);
+    `,
+      [hostId]
+    );
 
     res.json({
       success: true,
-      requests: requestsResult.rows
+      requests: requestsResult.rows,
     });
   } catch (error) {
     console.error("Get host requests error:", error);
@@ -386,9 +446,10 @@ app.get("/api/host/requests", verifyToken, async (req, res) => {
 app.get("/api/host/controllers", verifyToken, async (req, res) => {
   try {
     const hostId = req.user.user_id;
-    
+
     // Get active controllers for this host
-    const controllersResult = await pool.query(`
+    const controllersResult = await pool.query(
+      `
       SELECT 
         u.user_id,
         u.google_id,
@@ -403,11 +464,13 @@ app.get("/api/host/controllers", verifyToken, async (req, res) => {
       JOIN users u ON hr.controller_user_id = u.user_id
       WHERE hr.host_user_id = $1 AND hr.status = 'active'
       ORDER BY u.display_name ASC
-    `, [hostId]);
+    `,
+      [hostId]
+    );
 
     res.json({
       success: true,
-      controllers: controllersResult.rows
+      controllers: controllersResult.rows,
     });
   } catch (error) {
     console.error("Get host controllers error:", error);
@@ -416,82 +479,100 @@ app.get("/api/host/controllers", verifyToken, async (req, res) => {
 });
 
 // Accept connection request
-app.post("/api/host/requests/:relationshipId/accept", verifyToken, async (req, res) => {
-  try {
-    const hostId = req.user.user_id;
-    const relationshipId = req.params.relationshipId;
+app.post(
+  "/api/host/requests/:relationshipId/accept",
+  verifyToken,
+  async (req, res) => {
+    try {
+      const hostId = req.user.user_id;
+      const relationshipId = req.params.relationshipId;
 
-    // Update relationship status to active
-    const result = await pool.query(
-      "UPDATE host_relationships SET status = 'active', updated_at = NOW() WHERE relationship_id = $1 AND host_user_id = $2 AND status = 'pending' RETURNING *",
-      [relationshipId, hostId]
-    );
+      // Update relationship status to active
+      const result = await pool.query(
+        "UPDATE host_relationships SET status = 'active', updated_at = NOW() WHERE relationship_id = $1 AND host_user_id = $2 AND status = 'pending' RETURNING *",
+        [relationshipId, hostId]
+      );
 
-    if (result.rows.length === 0) {
-      return res.status(404).json({ error: "Request not found or already processed" });
+      if (result.rows.length === 0) {
+        return res
+          .status(404)
+          .json({ error: "Request not found or already processed" });
+      }
+
+      res.json({
+        success: true,
+        message: "Request accepted successfully",
+      });
+    } catch (error) {
+      console.error("Accept request error:", error);
+      res.status(500).json({ error: "Failed to accept request" });
     }
-
-    res.json({
-      success: true,
-      message: "Request accepted successfully"
-    });
-  } catch (error) {
-    console.error("Accept request error:", error);
-    res.status(500).json({ error: "Failed to accept request" });
   }
-});
+);
 
 // Reject connection request
-app.post("/api/host/requests/:relationshipId/reject", verifyToken, async (req, res) => {
-  try {
-    const hostId = req.user.user_id;
-    const relationshipId = req.params.relationshipId;
+app.post(
+  "/api/host/requests/:relationshipId/reject",
+  verifyToken,
+  async (req, res) => {
+    try {
+      const hostId = req.user.user_id;
+      const relationshipId = req.params.relationshipId;
 
-    // Update relationship status to rejected
-    const result = await pool.query(
-      "UPDATE host_relationships SET status = 'rejected', updated_at = NOW() WHERE relationship_id = $1 AND host_user_id = $2 AND status = 'pending' RETURNING *",
-      [relationshipId, hostId]
-    );
+      // Update relationship status to rejected
+      const result = await pool.query(
+        "UPDATE host_relationships SET status = 'rejected', updated_at = NOW() WHERE relationship_id = $1 AND host_user_id = $2 AND status = 'pending' RETURNING *",
+        [relationshipId, hostId]
+      );
 
-    if (result.rows.length === 0) {
-      return res.status(404).json({ error: "Request not found or already processed" });
+      if (result.rows.length === 0) {
+        return res
+          .status(404)
+          .json({ error: "Request not found or already processed" });
+      }
+
+      res.json({
+        success: true,
+        message: "Request rejected successfully",
+      });
+    } catch (error) {
+      console.error("Reject request error:", error);
+      res.status(500).json({ error: "Failed to reject request" });
     }
-
-    res.json({
-      success: true,
-      message: "Request rejected successfully"
-    });
-  } catch (error) {
-    console.error("Reject request error:", error);
-    res.status(500).json({ error: "Failed to reject request" });
   }
-});
+);
 
 // Revoke controller access
-app.delete("/api/host/controllers/:relationshipId", verifyToken, async (req, res) => {
-  try {
-    const hostId = req.user.user_id;
-    const relationshipId = req.params.relationshipId;
+app.delete(
+  "/api/host/controllers/:relationshipId",
+  verifyToken,
+  async (req, res) => {
+    try {
+      const hostId = req.user.user_id;
+      const relationshipId = req.params.relationshipId;
 
-    // Delete or update relationship
-    const result = await pool.query(
-      "DELETE FROM host_relationships WHERE relationship_id = $1 AND host_user_id = $2 RETURNING *",
-      [relationshipId, hostId]
-    );
+      // Delete or update relationship
+      const result = await pool.query(
+        "DELETE FROM host_relationships WHERE relationship_id = $1 AND host_user_id = $2 RETURNING *",
+        [relationshipId, hostId]
+      );
 
-    if (result.rows.length === 0) {
-      return res.status(404).json({ error: "Controller relationship not found" });
+      if (result.rows.length === 0) {
+        return res
+          .status(404)
+          .json({ error: "Controller relationship not found" });
+      }
+
+      res.json({
+        success: true,
+        message: "Controller access revoked successfully",
+      });
+    } catch (error) {
+      console.error("Revoke controller error:", error);
+      res.status(500).json({ error: "Failed to revoke access" });
     }
-
-    res.json({
-      success: true,
-      message: "Controller access revoked successfully"
-    });
-  } catch (error) {
-    console.error("Revoke controller error:", error);
-    res.status(500).json({ error: "Failed to revoke access" });
   }
-});
+);
 
 app.listen(PORT, () => {
   console.log(`Auth service running on port ${PORT}`);

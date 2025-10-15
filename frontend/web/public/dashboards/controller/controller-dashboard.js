@@ -289,8 +289,11 @@
         error.message.includes("No auth token")
       ) {
         console.log("Authentication required, redirecting to login...");
-        window.location.href = "/login/login.html";
-        return;
+
+        setTimeout(() => {
+          window.location.href = "/login/login.html";
+          return;
+        }, 1000000);
       }
 
       showNotification("Failed to load hosts: " + error.message, "error");
@@ -357,21 +360,28 @@
   }
 
   // Initialize
-  // function init() {
-  //   console.log('Initializing Controller Dashboard...');
-  //   loadHosts();
+  function init() {
+    console.log("Initializing Controller Dashboard...");
+    loadHosts();
 
-  //   // Check authentication
-  //   // TODO: Verify user is logged in and has controller role
-  //   const token = localStorage.getItem('auth_token');
-  //   if (!token) {
-  //     console.log('No auth token found, redirecting to login...');
-  //     window.location.href = '/login/login.html';
-  //     return;
-  //   }
+    // Check authentication
+    // TODO: Verify user is logged in and has controller role
+    const token = localStorage.getItem("auth_token");
+    console.log("🔍 Auth check - token found:", token ? "YES" : "NO");
+    console.log("🔍 Token value:", token);
 
-  //   console.log('Controller Dashboard initialized successfully');
-  // }
+    if (!token) {
+      console.log("❌ No auth token found, redirecting to login...");
+      setTimeout(() => {
+        window.location.href = "/login/login.html";
+        return;
+      }, 100000);
+    }
+
+    console.log("✅ Auth token found, dashboard access granted");
+
+    console.log("Controller Dashboard initialized successfully");
+  }
 
   // Start the application
   init();
