@@ -9,8 +9,37 @@
   <body>
     <main class="container">
       <section class="card">
-        <h1>Welcome</h1>
-        <p>Operator portal</p>
+        <h1 style="text-align: center">REMOTE DESKTOP BY THANG AND BAO</h1>
+        <p style="text-align: center">_____________________________</p>
+
+        <!-- Role Selection -->
+        <div class="role-section">
+          <h3 style="text-align: center">Choose your role</h3>
+          <div class="role-options">
+            <label class="role-option">
+              <input type="radio" name="role" value="controller" checked />
+              <div class="role-card">
+                <div class="role-icon">🎮</div>
+                <div class="role-info">
+                  <div class="role-title">Controller</div>
+                  <div class="role-desc">Control other computers</div>
+                </div>
+              </div>
+            </label>
+
+            <label class="role-option">
+              <input type="radio" name="role" value="host" />
+              <div class="role-card">
+                <div class="role-icon">🖥️</div>
+                <div class="role-info">
+                  <div class="role-title">Host</div>
+                  <div class="role-desc">Allow others to control</div>
+                </div>
+              </div>
+            </label>
+          </div>
+        </div>
+
         <button id="google-signin" class="google-btn">
           <img
             src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg"
