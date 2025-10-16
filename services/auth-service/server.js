@@ -35,51 +35,62 @@ app.use(
 app.use(passport.initialize());
 app.use(passport.session());
 
-// Google OAuth Strategy
-passport.use(
-  new GoogleStrategy(
-    {
-      clientID: process.env.GOOGLE_CLIENT_ID,
-      clientSecret: process.env.GOOGLE_CLIENT_SECRET,
-      callbackURL: "/auth/google/callback",
-    },
-    async (accessToken, refreshToken, profile, done) => {
-      try {
-        // Check if user exists
-        const userQuery = "SELECT * FROM users WHERE google_id = $1";
-        const existing = await pool.query(userQuery, [profile.id]);
+// Google OAuth Strategy (optional in dev if not configured)
+const oauthConfigured =
+  !!process.env.GOOGLE_CLIENT_ID && !!process.env.GOOGLE_CLIENT_SECRET;
 
-        if (existing.rows.length > 0) {
-          console.log("👤 Existing user found:", existing.rows[0]);
-          return done(null, existing.rows[0]);
-        }
+if (oauthConfigured) {
+  passport.use(
+    new GoogleStrategy(
+      {
+        clientID: process.env.GOOGLE_CLIENT_ID,
+        clientSecret: process.env.GOOGLE_CLIENT_SECRET,
+        callbackURL:
+          process.env.GOOGLE_CALLBACK_URL ||
+          "http://localhost:8081/auth/google/callback",
+      },
+      async (accessToken, refreshToken, profile, done) => {
+        try {
+          // Check if user exists
+          const userQuery = "SELECT * FROM users WHERE google_id = $1";
+          const existing = await pool.query(userQuery, [profile.id]);
 
-        // Create new user
-        console.log("👤 Creating new user:", {
-          googleId: profile.id,
-          email: profile.emails[0].value,
-          name: profile.displayName,
-        });
-        const insertQuery = `
+          if (existing.rows.length > 0) {
+            console.log("👤 Existing user found:", existing.rows[0]);
+            return done(null, existing.rows[0]);
+          }
+
+          // Create new user
+          console.log("👤 Creating new user:", {
+            googleId: profile.id,
+            email: profile.emails[0].value,
+            name: profile.displayName,
+          });
+          const insertQuery = `
       INSERT INTO users (google_id, email, name, avatar_url)
       VALUES ($1, $2, $3, $4)
       RETURNING *
     `;
-        const newUser = await pool.query(insertQuery, [
-          profile.id,
-          profile.emails[0].value,
-          profile.displayName,
-          profile.photos[0].value,
-        ]);
+          const newUser = await pool.query(insertQuery, [
+            profile.id,
+            profile.emails[0].value,
+            profile.displayName,
+            profile.photos[0].value,
+          ]);
 
-        console.log("✅ User created successfully:", newUser.rows[0]);
-        return done(null, newUser.rows[0]);
-      } catch (error) {
-        return done(error, null);
+          console.log("✅ User created successfully:", newUser.rows[0]);
+          return done(null, newUser.rows[0]);
+        } catch (error) {
+          return done(error, null);
+        }
       }
-    }
-  )
-);
+    )
+  );
+} else {
+  console.warn(
+    "Google OAuth not configured (missing GOOGLE_CLIENT_ID/GOOGLE_CLIENT_SECRET). Auth endpoints will return 503."
+  );
+}
 
 passport.serializeUser((user, done) => done(null, user.id));
 passport.deserializeUser(async (id, done) => {
@@ -97,29 +108,30 @@ app.get("/health", (req, res) => {
 });
 
 // Start Google OAuth
-app.get(
-  "/auth/google",
-  (req, res, next) => {
-    console.log("🚀 /auth/google route called with query:", req.query);
-    console.log("🔗 Full URL:", req.originalUrl);
-    next();
-  },
-  passport.authenticate("google", { scope: ["profile", "email"] })
-);
+if (oauthConfigured) {
+  app.get(
+    "/auth/google",
+    (req, res, next) => {
+      console.log("🚀 /auth/google route called with query:", req.query);
+      console.log("🔗 Full URL:", req.originalUrl);
+      next();
+    },
+    passport.authenticate("google", { scope: ["profile", "email"] })
+  );
 
-// Google OAuth callback
-app.get(
-  "/auth/google/callback",
-  (req, res, next) => {
-    console.log("📞 /auth/google/callback called with query:", req.query);
-    console.log("🔗 Full callback URL:", req.originalUrl);
-    next();
-  },
-  passport.authenticate("google", {
-    failureRedirect: "http://localhost:3000/login/login.html",
-    failureFlash: true,
-  }),
-  async (req, res) => {
+  // Google OAuth callback
+  app.get(
+    "/auth/google/callback",
+    (req, res, next) => {
+      console.log("📞 /auth/google/callback called with query:", req.query);
+      console.log("🔗 Full callback URL:", req.originalUrl);
+      next();
+    },
+    passport.authenticate("google", {
+      failureRedirect: "http://localhost:3000/login/login.html",
+      failureFlash: true,
+    }),
+    async (req, res) => {
     try {
       console.log("🔐 Starting session creation for user:", req.user);
 
@@ -200,7 +212,19 @@ app.get(
       );
     }
   }
-);
+  );
+} else {
+  app.get("/auth/google", (req, res) => {
+    res.status(503).json({
+      error: "Google OAuth not configured",
+      hint:
+        "Set GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET in infra/docker/.env and restart auth-service.",
+    });
+  });
+  app.get("/auth/google/callback", (req, res) => {
+    res.redirect("http://localhost:3000/login/login.html?error=oauth_not_configured");
+  });
+}
 
 // Verify token endpoint
 app.get("/auth/verify", async (req, res) => {
