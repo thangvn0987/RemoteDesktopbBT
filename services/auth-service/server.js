@@ -296,7 +296,7 @@ app.get("/api/hosts", verifyToken, async (req, res) => {
     // Get hosts that this user can control
     const hostsResult = await pool.query(
       `
-      SELECT 
+      SELECT DISTINCT ON (u.id)
         u.id AS user_id,
         u.google_id,
         u.name AS display_name,
@@ -306,14 +306,16 @@ app.get("/api/hosts", verifyToken, async (req, res) => {
         hr.status,
         hr.created_at as relationship_created,
         CASE 
-          WHEN us.user_id IS NOT NULL AND us.expires_at > NOW() THEN 'online'
+          WHEN EXISTS (
+            SELECT 1 FROM user_sessions us 
+            WHERE us.user_id = u.id AND us.expires_at > NOW()
+          ) THEN 'online'
           ELSE 'offline'
         END as online_status
       FROM host_relationships hr
       JOIN users u ON hr.host_user_id = u.id
-      LEFT JOIN user_sessions us ON u.id = us.user_id
       WHERE hr.controller_user_id = $1 AND hr.status = 'active'
-      ORDER BY u.name ASC
+      ORDER BY u.id, hr.updated_at DESC, hr.relationship_id DESC
     `,
       [userId]
     );
@@ -328,6 +330,34 @@ app.get("/api/hosts", verifyToken, async (req, res) => {
   }
 });
 
+// Controller: get pending invitations sent
+app.get("/api/hosts/pending", verifyToken, async (req, res) => {
+  try {
+    const controllerId = req.user.id;
+    const pending = await pool.query(
+      `SELECT 
+         hr.relationship_id,
+         hr.status,
+         hr.invitation_message,
+         hr.created_at,
+         u.id   AS user_id,
+         u.name AS display_name,
+         u.email,
+         u.avatar_url AS profile_image
+       FROM host_relationships hr
+       JOIN users u ON u.id = hr.host_user_id
+       WHERE hr.controller_user_id = $1 AND hr.status = 'pending'
+       ORDER BY hr.created_at DESC`,
+      [controllerId]
+    );
+
+    res.json({ success: true, invitations: pending.rows });
+  } catch (error) {
+    console.error("Get controller pending invites error:", error);
+    res.status(500).json({ error: "Failed to fetch pending invitations" });
+  }
+});
+
 // Add new host relationship
 app.post("/api/hosts", verifyToken, async (req, res) => {
   try {
@@ -338,10 +368,22 @@ app.post("/api/hosts", verifyToken, async (req, res) => {
       return res.status(400).json({ error: "Email is required" });
     }
 
+    // Normalize email
+    const normalizedEmail = String(email).trim().toLowerCase();
+
+    // Prevent inviting yourself
+    const selfCheck = await pool.query(
+      "SELECT id FROM users WHERE id = $1 AND LOWER(email) = $2",
+      [controllerId, normalizedEmail]
+    );
+    if (selfCheck.rows.length > 0) {
+      return res.status(400).json({ error: "You cannot invite yourself" });
+    }
+
     // Find host user by email
     const hostResult = await pool.query(
-      "SELECT id FROM users WHERE email = $1",
-      [email]
+      "SELECT id FROM users WHERE LOWER(email) = $1",
+      [normalizedEmail]
     );
 
     if (hostResult.rows.length === 0) {
@@ -370,7 +412,25 @@ app.post("/api/hosts", verifyToken, async (req, res) => {
       [controllerId, hostId, message || null]
     );
 
-    // TODO: Send notification to host user
+    // Audit log: invite sent
+    try {
+      await pool.query(
+        `INSERT INTO audit_logs (user_id, action, details)
+         VALUES ($1, $2, $3::jsonb)`,
+        [
+          controllerId,
+          "invite_sent",
+          JSON.stringify({
+            relationship_id: relationshipResult.rows[0].relationship_id,
+            controller_user_id: controllerId,
+            host_user_id: hostId,
+            message: message || null,
+          }),
+        ]
+      );
+    } catch (e) {
+      console.warn("Audit log (invite_sent) failed:", e.message);
+    }
 
     res.json({
       success: true,
@@ -397,6 +457,21 @@ app.delete("/api/hosts/:relationshipId", verifyToken, async (req, res) => {
 
     if (result.rows.length === 0) {
       return res.status(404).json({ error: "Relationship not found" });
+    }
+
+    // Audit log: relationship removed by controller
+    try {
+      await pool.query(
+        `INSERT INTO audit_logs (user_id, action, details)
+         VALUES ($1, $2, $3::jsonb)`,
+        [
+          controllerId,
+          "relationship_removed",
+          JSON.stringify({ relationship_id: relationshipId }),
+        ]
+      );
+    } catch (e) {
+      console.warn("Audit log (relationship_removed) failed:", e.message);
     }
 
     res.json({
@@ -504,6 +579,21 @@ app.post(
           .json({ error: "Request not found or already processed" });
       }
 
+      // Audit log: invite accepted
+      try {
+        await pool.query(
+          `INSERT INTO audit_logs (user_id, action, details)
+           VALUES ($1, $2, $3::jsonb)`,
+          [
+            hostId,
+            "invite_accepted",
+            JSON.stringify({ relationship_id: relationshipId }),
+          ]
+        );
+      } catch (e) {
+        console.warn("Audit log (invite_accepted) failed:", e.message);
+      }
+
       res.json({
         success: true,
         message: "Request accepted successfully",
@@ -534,6 +624,21 @@ app.post(
         return res
           .status(404)
           .json({ error: "Request not found or already processed" });
+      }
+
+      // Audit log: invite rejected
+      try {
+        await pool.query(
+          `INSERT INTO audit_logs (user_id, action, details)
+           VALUES ($1, $2, $3::jsonb)`,
+          [
+            hostId,
+            "invite_rejected",
+            JSON.stringify({ relationship_id: relationshipId }),
+          ]
+        );
+      } catch (e) {
+        console.warn("Audit log (invite_rejected) failed:", e.message);
       }
 
       res.json({

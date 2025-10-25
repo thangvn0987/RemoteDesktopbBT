@@ -33,8 +33,8 @@ CREATE TABLE remote_sessions (
 -- Host relationships (controller-host pairs)
 CREATE TABLE host_relationships (
     relationship_id SERIAL PRIMARY KEY,
-    controller_user_id INTEGER REFERENCES users(id) NOT NULL,
-    host_user_id INTEGER REFERENCES users(id) NOT NULL,
+    controller_user_id INTEGER REFERENCES users(id) ON DELETE CASCADE NOT NULL,
+    host_user_id INTEGER REFERENCES users(id) ON DELETE CASCADE NOT NULL,
     status VARCHAR(20) DEFAULT 'pending' CHECK (status IN ('pending', 'active', 'rejected', 'blocked')),
     invitation_message TEXT,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
@@ -61,6 +61,22 @@ CREATE INDEX idx_sessions_expires ON user_sessions(expires_at);
 CREATE INDEX idx_remote_sessions_user ON remote_sessions(user_id);
 CREATE INDEX idx_host_relationships_controller ON host_relationships(controller_user_id);
 CREATE INDEX idx_host_relationships_host ON host_relationships(host_user_id);
+CREATE INDEX idx_host_relationships_host_status ON host_relationships(host_user_id, status);
+CREATE INDEX idx_host_relationships_controller_status ON host_relationships(controller_user_id, status);
+
+-- Trigger to auto-update updated_at
+CREATE OR REPLACE FUNCTION set_updated_at()
+RETURNS TRIGGER AS $$
+BEGIN
+    NEW.updated_at = CURRENT_TIMESTAMP;
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+DROP TRIGGER IF EXISTS trg_host_relationships_updated ON host_relationships;
+CREATE TRIGGER trg_host_relationships_updated
+BEFORE UPDATE ON host_relationships
+FOR EACH ROW EXECUTE FUNCTION set_updated_at();
 CREATE INDEX idx_audit_logs_user ON audit_logs(user_id);
 
 -- Insert sample data for development
