@@ -337,7 +337,10 @@
     } catch (err) {
       console.warn("Failed to load user profile:", err);
       // If token invalid, redirect to login
-      if (String(err).includes("401") || String(err).includes("No auth token")) {
+      if (
+        String(err).includes("401") ||
+        String(err).includes("No auth token")
+      ) {
         window.location.href = "/login/login.html";
       }
     }

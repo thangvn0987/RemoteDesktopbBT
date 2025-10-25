@@ -348,7 +348,7 @@ app.post("/api/hosts", verifyToken, async (req, res) => {
       return res.status(404).json({ error: "User not found with this email" });
     }
 
-  const hostId = hostResult.rows[0].id;
+    const hostId = hostResult.rows[0].id;
 
     // Check if relationship already exists
     const existingResult = await pool.query(
@@ -386,7 +386,7 @@ app.post("/api/hosts", verifyToken, async (req, res) => {
 // Remove host relationship
 app.delete("/api/hosts/:relationshipId", verifyToken, async (req, res) => {
   try {
-  const controllerId = req.user.id;
+    const controllerId = req.user.id;
     const relationshipId = req.params.relationshipId;
 
     // Verify ownership and delete

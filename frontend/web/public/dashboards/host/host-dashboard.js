@@ -478,33 +478,36 @@
       if (roleEl) roleEl.textContent = "Host";
     } catch (err) {
       console.warn("Failed to load user profile (host):", err);
-      if (String(err).includes("401") || String(err).includes("No auth token")) {
+      if (
+        String(err).includes("401") ||
+        String(err).includes("No auth token")
+      ) {
         window.location.href = "/login/login.html";
       }
     }
   }
 
   // Initialize
-    function init() {
-      console.log('Initializing Host Dashboard...');
+  function init() {
+    console.log("Initializing Host Dashboard...");
 
-      // Load user profile header
-      loadUserProfile();
+    // Load user profile header
+    loadUserProfile();
 
-      // Check authentication
-      const token = localStorage.getItem('auth_token');
-      if (!token) {
-        console.log('No auth token found, redirecting to login...');
-        window.location.href = '/login/login.html';
-        return;
-      }
-
-      // Load data
-      loadRequests();
-      loadControllers();
-
-      console.log('Host Dashboard initialized successfully');
+    // Check authentication
+    const token = localStorage.getItem("auth_token");
+    if (!token) {
+      console.log("No auth token found, redirecting to login...");
+      window.location.href = "/login/login.html";
+      return;
     }
+
+    // Load data
+    loadRequests();
+    loadControllers();
+
+    console.log("Host Dashboard initialized successfully");
+  }
 
   // Start the application
   init();
