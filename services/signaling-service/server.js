@@ -171,10 +171,14 @@ const helperServer = net.createServer((socket) => {
       } else if (line.startsWith("CLIP ")) {
         const b64 = line.substring(5).trim();
         let text = "";
-        try { text = Buffer.from(b64, "base64").toString("utf8"); } catch(_) {}
+        try {
+          text = Buffer.from(b64, "base64").toString("utf8");
+        } catch (_) {}
         const msg = JSON.stringify({ type: "clip", text, base64: b64 });
         for (const client of wss.clients) {
-          try { client.send(msg); } catch(_){}
+          try {
+            client.send(msg);
+          } catch (_) {}
         }
       } else {
         // ignore other lines
