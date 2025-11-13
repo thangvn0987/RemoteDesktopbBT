@@ -248,7 +248,7 @@ app.post("/session", (req, res) => {
     req.headers["x-forwarded-ssl"] === "on" ||
     process.env.FORCE_WSS === "1";
   const scheme = isSecure ? "wss" : "ws";
-  
+
   // Determine host:port for client-facing WS URL
   let host =
     req.headers["x-forwarded-host"] ||
