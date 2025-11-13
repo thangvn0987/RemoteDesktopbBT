@@ -33,6 +33,11 @@ let helperSocket = null;
 let helperReady = false;
 let pendingQueue = [];
 
+// Track active WebSocket connections
+const activeConnections = new Set();
+const MAX_CONNECTIONS = 10;
+const MAX_PENDING = 3; // Max queued frames per client
+
 // TCP server that accepts a single helper connection
 const helperServer = net.createServer((socket) => {
   if (helperSocket) {
@@ -66,6 +71,8 @@ const helperServer = net.createServer((socket) => {
 
   let bufAcc = Buffer.alloc(0);
   let frameExpect = -1; // expecting N bytes of base64
+  let frameWidth = 0;
+  let frameHeight = 0;
   // Clipboard line buffer (simple lines 'CLIP <base64>') handled like GEOM
 
   socket.on("data", (chunk) => {
@@ -77,16 +84,36 @@ const helperServer = net.createServer((socket) => {
           const payload = bufAcc.subarray(0, frameExpect).toString("utf8");
           const nl = bufAcc[frameExpect];
           bufAcc = bufAcc.subarray(frameExpect + 1);
-          // broadcast frame to all WS clients
+          // broadcast frame to all WS clients (non-blocking)
           const msg = JSON.stringify({
             type: "frame",
-            mime: "image/png",
+            mime: "image/jpeg", // Changed from PNG to JPEG for bandwidth optimization
             data: payload,
+            width: frameWidth,
+            height: frameHeight,
           });
-          for (const client of wss.clients) {
-            try {
-              client.send(msg);
-            } catch (_) {}
+          const msgSize = Buffer.byteLength(msg, "utf8");
+          if (msgSize > 100000) {
+            console.warn(`[perf] large frame: ${Math.round(msgSize / 1024)}KB`);
+          }
+          for (const client of activeConnections) {
+            if (client.readyState === 1) {
+              // WebSocket.OPEN
+              // Skip if client is too slow (backpressure)
+              if (client._pendingFrames >= MAX_PENDING) {
+                console.warn("[ws] skipping frame for slow client");
+                continue;
+              }
+              client._pendingFrames++;
+              // Use async send with error handling
+              client.send(msg, { binary: false, compress: false }, (err) => {
+                client._pendingFrames--;
+                if (err) {
+                  console.error("[ws] frame send error:", err.message);
+                  activeConnections.delete(client);
+                }
+              });
+            }
           }
           frameExpect = -1;
           continue;
@@ -145,9 +172,18 @@ const helperServer = net.createServer((socket) => {
           pendingQueue = [];
         }
       } else if (line.startsWith("FRAME ")) {
+        // FRAME <size> [<width>x<height>]
         const parts = line.split(" ");
         const n = parseInt(parts[1] || "0", 10);
         frameExpect = n > 0 ? n : -1;
+        // Parse optional resolution (e.g., "1920x1080")
+        if (parts[2] && parts[2].includes("x")) {
+          const [w, h] = parts[2].split("x").map((s) => parseInt(s, 10));
+          if (w > 0 && h > 0) {
+            frameWidth = w;
+            frameHeight = h;
+          }
+        }
       } else if (line.startsWith("GEOM ")) {
         // Geometry metadata: GEOM originX originY width height
         const parts = line.split(" ");
@@ -163,10 +199,14 @@ const helperServer = net.createServer((socket) => {
             width: gw,
             height: gh,
           });
-          for (const client of wss.clients) {
-            try {
-              client.send(msg);
-            } catch (_) {}
+          for (const client of activeConnections) {
+            if (client.readyState === 1) {
+              try {
+                client.send(msg);
+              } catch (_) {
+                activeConnections.delete(client);
+              }
+            }
           }
         }
       } else if (line.startsWith("CLIP ")) {
@@ -176,10 +216,14 @@ const helperServer = net.createServer((socket) => {
           text = Buffer.from(b64, "base64").toString("utf8");
         } catch (_) {}
         const msg = JSON.stringify({ type: "clip", text, base64: b64 });
-        for (const client of wss.clients) {
-          try {
-            client.send(msg);
-          } catch (_) {}
+        for (const client of activeConnections) {
+          if (client.readyState === 1) {
+            try {
+              client.send(msg);
+            } catch (_) {
+              activeConnections.delete(client);
+            }
+          }
         }
       } else {
         // ignore other lines
@@ -306,8 +350,19 @@ wss.on("connection", (ws, req) => {
     ws.close(4003, "invalid token");
     return;
   }
-  console.log("[ws] client connected");
+  // Connection limit check
+  if (activeConnections.size >= MAX_CONNECTIONS) {
+    console.warn("[ws] connection limit reached, rejecting");
+    ws.close(4008, "connection limit");
+    return;
+  }
+
+  activeConnections.add(ws);
+  console.log(`[ws] client connected (${activeConnections.size} active)`);
   ws.send(JSON.stringify({ type: "welcome", helperReady }));
+
+  // Track connection health
+  ws._pendingFrames = 0;
 
   // Throttle MOVE commands to reduce spam (30fps max)
   let lastMoveTime = 0;
@@ -361,8 +416,23 @@ wss.on("connection", (ws, req) => {
       );
       if (on) toHelper(`CAPTURE ON ${interval}`);
       else toHelper("CAPTURE OFF");
+    } else if (msg.type === "quality") {
+      // JPEG quality control (1-100, lower=smaller, higher=better)
+      const quality = Math.max(
+        1,
+        Math.min(100, parseInt(msg.quality || "75", 10))
+      );
+      toHelper(`QUALITY ${quality}`);
+      console.log("[ws] quality set to", quality);
     } else if (msg.type === "ping") {
-      ws.send(JSON.stringify({ type: "pong" }));
+      // Immediate pong response with high priority
+      try {
+        ws.send(JSON.stringify({ type: "pong" }), (err) => {
+          if (err) console.error("[ws] pong send error:", err.message);
+        });
+      } catch (e) {
+        console.error("[ws] pong error:", e.message);
+      }
     } else if (msg.type === "clipGet") {
       toHelper("CLIPGET");
     } else if (msg.type === "clipSet") {
@@ -371,14 +441,29 @@ wss.on("connection", (ws, req) => {
       toHelper(`CLIPSET ${b64}`);
     }
   });
+
+  // Cleanup on disconnect
+  ws.on("close", () => {
+    activeConnections.delete(ws);
+    console.log(`[ws] client disconnected (${activeConnections.size} active)`);
+  });
+
+  ws.on("error", (err) => {
+    console.error("[ws] error:", err.message);
+    activeConnections.delete(ws);
+  });
 });
 
 function broadcastHelperReady() {
   const payload = JSON.stringify({ type: "helperReady", helperReady });
-  for (const client of wss.clients) {
-    try {
-      client.send(payload);
-    } catch (_) {}
+  for (const client of activeConnections) {
+    if (client.readyState === 1) {
+      try {
+        client.send(payload);
+      } catch (_) {
+        activeConnections.delete(client);
+      }
+    }
   }
 }
 
