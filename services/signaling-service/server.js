@@ -241,11 +241,6 @@ app.post("/session", (req, res) => {
     issuer: "signaling",
     subject: sessionId,
   });
-  const host =
-    req.headers["x-forwarded-host"] ||
-    req.headers.host ||
-    `localhost:${WS_PORT}`;
-
   // Auto-detect WebSocket protocol based on request
   const isSecure =
     req.secure ||
@@ -253,6 +248,25 @@ app.post("/session", (req, res) => {
     req.headers["x-forwarded-ssl"] === "on" ||
     process.env.FORCE_WSS === "1";
   const scheme = isSecure ? "wss" : "ws";
+  
+  // Determine host:port for client-facing WS URL
+  let host =
+    req.headers["x-forwarded-host"] ||
+    req.headers.host ||
+    `localhost:${WS_PORT}`;
+  // If forwarded host is missing an explicit port, append the public port
+  if (!host.includes(":")) {
+    // Try to infer from PUBLIC_BASE_URL or fall back to 8444 for https / WS_PORT for http
+    let inferredPort = undefined;
+    try {
+      if (process.env.PUBLIC_BASE_URL) {
+        const u = new URL(process.env.PUBLIC_BASE_URL);
+        inferredPort = u.port;
+      }
+    } catch (_) {}
+    if (!inferredPort) inferredPort = isSecure ? "8444" : String(WS_PORT);
+    host = `${host}:${inferredPort}`;
+  }
 
   const wsUrl = `${scheme}://${host}/ws/?token=${token}`;
   res.json({ sessionId, token, wsUrl, helperReady });

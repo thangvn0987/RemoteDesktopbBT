@@ -154,6 +154,8 @@
       let ws;
       let imgNaturalW = 1920,
         imgNaturalH = 1080;
+      let originX = 0,
+        originY = 0;
       let lastMoveTs = 0;
       let lastWsUrl = "";
       let kbOn = false;
@@ -223,8 +225,8 @@
         const r = img.getBoundingClientRect();
         const x = Math.max(0, Math.min(evt.clientX - r.left, r.width));
         const y = Math.max(0, Math.min(evt.clientY - r.top, r.height));
-        const sx = Math.round(x * (imgNaturalW / r.width));
-        const sy = Math.round(y * (imgNaturalH / r.height));
+        const sx = Math.round(x * (imgNaturalW / r.width)) + originX;
+        const sy = Math.round(y * (imgNaturalH / r.height)) + originY;
         return { x: sx, y: sy };
       }
 
@@ -282,15 +284,18 @@
               } else if (m.type === "geom") {
                 imgNaturalW = m.width;
                 imgNaturalH = m.height;
+                originX = m.originX || 0;
+                originY = m.originY || 0;
                 log(
                   "geom: " +
                     m.width +
                     "x" +
                     m.height +
-                    " origin " +
-                    m.originX +
+                    " origin (" +
+                    originX +
                     "," +
-                    m.originY,
+                    originY +
+                    ")",
                   "ok"
                 );
               } else if (m.type === "clip") {
