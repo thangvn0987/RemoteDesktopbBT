@@ -308,11 +308,11 @@ wss.on("connection", (ws, req) => {
   }
   console.log("[ws] client connected");
   ws.send(JSON.stringify({ type: "welcome", helperReady }));
-  
+
   // Throttle MOVE commands to reduce spam (30fps max)
   let lastMoveTime = 0;
   const MOVE_THROTTLE_MS = 33;
-  
+
   ws.on("message", (raw) => {
     let msg;
     try {

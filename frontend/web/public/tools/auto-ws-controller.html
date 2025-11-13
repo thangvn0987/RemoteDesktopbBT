@@ -165,9 +165,13 @@
       window.addEventListener("resize", () => {
         cachedRect = null;
       });
-      window.addEventListener("scroll", () => {
-        cachedRect = null;
-      }, true); // Use capture phase to catch all scroll events
+      window.addEventListener(
+        "scroll",
+        () => {
+          cachedRect = null;
+        },
+        true
+      ); // Use capture phase to catch all scroll events
       let logCount = 0;
 
       // Auto-detect host and port from APP_CONFIG if available
