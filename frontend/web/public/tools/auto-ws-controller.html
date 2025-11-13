@@ -1,0 +1,419 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>RemoteBT Auto WS Controller</title>
+    <style>
+      body {
+        font-family: system-ui, Segoe UI, Roboto, Arial, sans-serif;
+        margin: 20px;
+      }
+      fieldset {
+        margin-bottom: 12px;
+      }
+      label {
+        display: inline-block;
+        min-width: 130px;
+      }
+      input[type="text"],
+      input[type="number"] {
+        width: 260px;
+      }
+      .row {
+        margin: 6px 0;
+      }
+      .ok {
+        color: #0a7;
+      }
+      .err {
+        color: #c33;
+      }
+      #log {
+        white-space: pre-wrap;
+        background: #111;
+        color: #eee;
+        padding: 8px;
+        border-radius: 6px;
+        max-height: 200px;
+        overflow: auto;
+      }
+    </style>
+  </head>
+  <body>
+    <h2>Auto WS Controller</h2>
+    <fieldset>
+      <legend>Signaling</legend>
+      <div class="row">
+        <label>Signaling host:port</label>
+        <input
+          id="sigHost"
+          type="text"
+          placeholder="localhost"
+          value="localhost"
+        />
+        :
+        <input id="sigPort" type="number" value="8080" />
+        <button id="btnHealth" style="margin-left: 8px">Health</button>
+      </div>
+      <div class="row">
+        <button id="btnSession">Create session & connect</button>
+        <span id="status"></span>
+        <span id="helper" style="margin-left: 12px"></span>
+        <button id="btnReconnect" style="margin-left: 12px; display: none">
+          Reconnect
+        </button>
+      </div>
+    </fieldset>
+
+    <fieldset>
+      <legend>Controls</legend>
+      <div class="row">
+        <label>Preview</label>
+        <button id="btnCapOn">Start Capture</button>
+        <button id="btnCapOff">Stop</button>
+        every
+        <input id="ival" type="number" value="500" style="width: 80px" /> ms
+      </div>
+      <div class="row">
+        <label>Keyboard</label>
+        <button id="kbToggle">Start Keyboard Capture</button>
+        <span id="kbStatus" style="margin-left: 8px"></span>
+      </div>
+      <div class="row">
+        <img
+          id="preview"
+          alt="preview"
+          style="
+            max-width: 100%;
+            border: 1px solid #444;
+            border-radius: 6px;
+            cursor: crosshair;
+          "
+        />
+      </div>
+      <div class="row">
+        <label>Move</label>
+        x <input id="mx" type="number" value="600" /> y
+        <input id="my" type="number" value="400" />
+        <button onclick="send({type:'move', x:+mx.value, y:+my.value})">
+          Send
+        </button>
+      </div>
+      <div class="row">
+        <label>Click</label>
+        <select id="btn">
+          <option>left</option>
+          <option>right</option>
+          <option>middle</option>
+        </select>
+        <button onclick="send({type:'click', button:btn.value})">Send</button>
+      </div>
+      <div class="row">
+        <label>Text</label>
+        <input id="txt" type="text" value="Hello from Auto WS" />
+        <button onclick="send({type:'type', text:txt.value})">Send</button>
+      </div>
+      <div class="row">
+        <label>Key</label>
+        <input id="key" type="text" value="Enter" />
+        <button onclick="send({type:'key', combo:key.value})">Send</button>
+      </div>
+      <div class="row">
+        <label>Scroll</label>
+        delta <input id="delta" type="number" value="120" />
+        <button onclick="send({type:'scroll', delta:+delta.value})">
+          Send
+        </button>
+      </div>
+    </fieldset>
+
+    <fieldset>
+      <legend>Log</legend>
+      <div class="row">
+        <label>Verbose log</label>
+        <input id="verbose" type="checkbox" checked />
+        <span style="font-size: 12px; color: #666"
+          >(bỏ chọn để giảm lag khi spam phím / move)</span
+        >
+        <button id="btnClear" style="margin-left: 12px">Clear</button>
+      </div>
+      <div id="log"></div>
+    </fieldset>
+
+    <script>
+      let ws;
+      let imgNaturalW = 1920,
+        imgNaturalH = 1080;
+      let lastMoveTs = 0;
+      let lastWsUrl = "";
+      let kbOn = false;
+      const downSet = new Set();
+      let logCount = 0;
+      function log(msg, cls) {
+        const verbose = document.getElementById("verbose");
+        if (!verbose.checked) {
+          // Chỉ giữ lại các sự kiện quan trọng khi tắt verbose
+          if (
+            !/^session|^WS open|^WS closed|^health|^geom|^ERROR|^<< \{\"type\":\"welcome|^<< \{\"type\":\"helperReady/.test(
+              msg
+            ) &&
+            !/KEY|type|click|move/.test(msg)
+          ) {
+          }
+        }
+        const el = document.getElementById("log");
+        const d = document.createElement("div");
+        d.textContent = msg;
+        if (cls) d.className = cls;
+        el.appendChild(d);
+        logCount++;
+        // Trim nếu quá nhiều
+        if (logCount > 500) {
+          while (el.firstChild && logCount > 400) {
+            el.removeChild(el.firstChild);
+            logCount--;
+          }
+        }
+        el.scrollTop = el.scrollHeight;
+      }
+      function setStatus(t, ok) {
+        const s = document.getElementById("status");
+        s.textContent = t;
+        s.className = ok ? "ok" : "err";
+      }
+      function setHelper(ready) {
+        const h = document.getElementById("helper");
+        h.textContent = "helper: " + (ready ? "ready" : "not ready");
+        h.className = ready ? "ok" : "err";
+      }
+      function send(obj) {
+        if (ws && ws.readyState === 1) {
+          ws.send(JSON.stringify(obj));
+          log(">> " + JSON.stringify(obj));
+        } else {
+          log("WS not connected", "err");
+        }
+      }
+      function scaledXY(evt) {
+        const img = document.getElementById("preview");
+        const r = img.getBoundingClientRect();
+        const x = Math.max(0, Math.min(evt.clientX - r.left, r.width));
+        const y = Math.max(0, Math.min(evt.clientY - r.top, r.height));
+        const sx = Math.round(x * (imgNaturalW / r.width));
+        const sy = Math.round(y * (imgNaturalH / r.height));
+        return { x: sx, y: sy };
+      }
+
+      async function createSession() {
+        const host =
+          document.getElementById("sigHost").value.trim() || "localhost";
+        const port = document.getElementById("sigPort").value.trim() || "8080";
+        const url = `http://${host}:${port}/session`;
+        try {
+          const r = await fetch(url, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+          });
+          if (!r.ok) {
+            throw new Error("HTTP " + r.status);
+          }
+          const { wsUrl, token, sessionId, helperReady } = await r.json();
+          log(
+            "session created: " +
+              sessionId +
+              " (helperReady=" +
+              helperReady +
+              ")",
+            "ok"
+          );
+          setHelper(!!helperReady);
+          lastWsUrl = wsUrl;
+          ws = new WebSocket(wsUrl);
+          ws.onopen = () => {
+            setStatus("connected", true);
+            log("WS open -> " + wsUrl, "ok");
+          };
+          ws.onmessage = (ev) => {
+            try {
+              const m = JSON.parse(ev.data);
+              if (m.type === "frame" && m.data) {
+                const img = document.getElementById("preview");
+                img.src = "data:image/png;base64," + m.data;
+                img.onload = () => {
+                  imgNaturalW = img.naturalWidth;
+                  imgNaturalH = img.naturalHeight;
+                };
+              } else if (m.type === "welcome") {
+                setHelper(!!m.helperReady);
+              } else if (m.type === "helperReady") {
+                setHelper(!!m.helperReady);
+              } else if (m.type === "geom") {
+                imgNaturalW = m.width;
+                imgNaturalH = m.height;
+                log(
+                  "geom: " +
+                    m.width +
+                    "x" +
+                    m.height +
+                    " origin " +
+                    m.originX +
+                    "," +
+                    m.originY,
+                  "ok"
+                );
+              }
+            } catch (_) {
+              /* non-JSON */
+            }
+            log("<< " + (typeof ev.data === "string" ? ev.data : "[binary]"));
+          };
+          ws.onclose = () => {
+            setStatus("closed", false);
+            log("WS closed");
+            document.getElementById("btnReconnect").style.display =
+              "inline-block";
+          };
+          ws.onerror = (e) => {
+            setStatus("error", false);
+            log("WS error", "err");
+            document.getElementById("btnReconnect").style.display =
+              "inline-block";
+          };
+        } catch (e) {
+          setStatus("session failed", false);
+          log("session error: " + e.message, "err");
+        }
+      }
+      document.getElementById("btnSession").onclick = createSession;
+      document.getElementById("btnClear").onclick = () => {
+        const el = document.getElementById("log");
+        el.textContent = "";
+        logCount = 0;
+      };
+      document.getElementById("btnReconnect").onclick = () => {
+        if (!lastWsUrl) {
+          log("No previous wsUrl", "err");
+          return;
+        }
+        try {
+          ws = new WebSocket(lastWsUrl);
+          document.getElementById("btnReconnect").style.display = "none";
+          log("reconnecting ws ...");
+        } catch (e) {
+          log("reconnect failed: " + e.message, "err");
+        }
+      };
+      document.getElementById("btnHealth").onclick = async () => {
+        const host =
+          document.getElementById("sigHost").value.trim() || "localhost";
+        const port = document.getElementById("sigPort").value.trim() || "8080";
+        try {
+          const r = await fetch(`http://${host}:${port}/health`);
+          const j = await r.json();
+          log("health: " + JSON.stringify(j), "ok");
+          setHelper(j.helperReady);
+        } catch (e) {
+          log("health error: " + e.message, "err");
+        }
+      };
+      document.getElementById("btnCapOn").onclick = () =>
+        send({ type: "capture", on: true, interval: +ival.value || 500 });
+      document.getElementById("btnCapOff").onclick = () =>
+        send({ type: "capture", on: false });
+
+      // Keyboard capture
+      function keyNameFromEvent(e) {
+        const k = e.key;
+        if (k === " ") {
+          return "space";
+        }
+        if (k === "Control" || k === "Ctrl") {
+          return "ctrl";
+        }
+        if (k === "Alt") {
+          return "alt";
+        }
+        if (k === "Shift") {
+          return "shift";
+        }
+        if (k === "ArrowLeft") return "left";
+        if (k === "ArrowRight") return "right";
+        if (k === "ArrowUp") return "up";
+        if (k === "ArrowDown") return "down";
+        if (k.length === 1) {
+          if (/[a-zA-Z]/.test(k)) return k.toUpperCase();
+          if (/[0-9]/.test(k)) return k;
+        }
+        // Common names already covered; fallback to raw key
+        return k;
+      }
+      function kbDown(e) {
+        if (!kbOn) return;
+        const name = keyNameFromEvent(e);
+        if (!name) return;
+        if (downSet.has(name) && e.repeat) {
+          e.preventDefault();
+          return;
+        }
+        downSet.add(name);
+        e.preventDefault();
+        send({ type: "keyDown", key: name });
+      }
+      function kbUp(e) {
+        if (!kbOn) return;
+        const name = keyNameFromEvent(e);
+        if (!name) return;
+        if (downSet.has(name)) downSet.delete(name);
+        e.preventDefault();
+        send({ type: "keyUp", key: name });
+      }
+      document.getElementById("kbToggle").onclick = () => {
+        kbOn = !kbOn;
+        const s = document.getElementById("kbStatus");
+        if (kbOn) {
+          window.addEventListener("keydown", kbDown, { capture: true });
+          window.addEventListener("keyup", kbUp, { capture: true });
+          s.textContent = "capturing";
+          s.className = "ok";
+          document.getElementById("kbToggle").textContent =
+            "Stop Keyboard Capture";
+        } else {
+          window.removeEventListener("keydown", kbDown, { capture: true });
+          window.removeEventListener("keyup", kbUp, { capture: true });
+          s.textContent = "stopped";
+          s.className = "";
+          downSet.clear();
+          document.getElementById("kbToggle").textContent =
+            "Start Keyboard Capture";
+        }
+      };
+
+      // Mouse interactions mapped to remote coordinates
+      (() => {
+        const img = document.getElementById("preview");
+        img.addEventListener("mousemove", (e) => {
+          const now = performance.now();
+          if (now - lastMoveTs < 25) return;
+          lastMoveTs = now;
+          const { x, y } = scaledXY(e);
+          send({ type: "move", x, y });
+        });
+        img.addEventListener("click", (e) => {
+          const { x, y } = scaledXY(e);
+          send({ type: "move", x, y });
+          send({ type: "click", button: e.shiftKey ? "right" : "left" });
+        });
+        img.addEventListener(
+          "wheel",
+          (e) => {
+            e.preventDefault();
+            const delta = Math.sign(e.deltaY) * -120;
+            send({ type: "scroll", delta });
+          },
+          { passive: false }
+        );
+      })();
+    </script>
+  </body>
+</html>

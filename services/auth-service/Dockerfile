@@ -2,11 +2,11 @@
 FROM node:20-alpine AS base
 WORKDIR /app
 
-# Copy only dependency manifests for better caching
-COPY package.json package-lock.json ./
+# Copy manifest(s); package-lock.json is optional so use a wildcard
+COPY package*.json ./
 
-# Install exact dependencies using lockfile
-RUN npm ci --only=production || npm ci
+# Install dependencies. Use npm ci when lockfile exists for reproducibility; fallback to npm install otherwise.
+RUN if [ -f package-lock.json ]; then npm ci --only=production || npm ci; else npm install --production; fi
 
 # Copy source code after dependencies to leverage cached layers
 COPY . .
