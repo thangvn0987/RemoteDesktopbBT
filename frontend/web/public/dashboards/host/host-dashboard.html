@@ -42,6 +42,29 @@
     <!-- Main Content -->
     <main class="main-content">
       <div class="container">
+        <!-- Host Linking Section -->
+        <section class="host-linking-section">
+          <h2>🖥️ Link This Computer</h2>
+          
+          <!-- Download Helper Agent -->
+          <div class="link-card download-card">
+            <h3>Step 1: Download Helper Agent</h3>
+            <p>Download and run the helper agent on this Windows computer.</p>
+            <a href="/downloads/remotebt_helper.exe" download class="download-btn">
+              ⬇️ Download remotebt_helper.exe
+            </a>
+            <p class="download-info">Windows only • Size: ~500 KB</p>
+          </div>
+          
+          <!-- Link Computer -->
+          <div class="link-card">
+            <h3>Step 2: Link This Computer</h3>
+            <p>After running the helper agent, click below to send configuration automatically.</p>
+            <button class="link-btn" id="btnLinkHost">Link This Computer</button>
+            <div class="link-status" id="link-status"></div>
+          </div>
+        </section>
+
         <!-- Pending Requests Section -->
         <section class="requests-section">
           <h2>Connection Requests</h2>

@@ -49,11 +49,11 @@
         <input
           id="sigHost"
           type="text"
-          placeholder="localhost"
-          value="localhost"
+          placeholder="192-168-29-196.nip.io"
+          value="192-168-29-196.nip.io"
         />
         :
-        <input id="sigPort" type="number" value="8080" />
+        <input id="sigPort" type="number" value="8444" />
         <button id="btnHealth" style="margin-left: 8px">Health</button>
       </div>
       <div class="row">
@@ -149,6 +149,7 @@
       <div id="log"></div>
     </fieldset>
 
+    <script src="../config.js"></script>
     <script>
       let ws;
       let imgNaturalW = 1920,
@@ -158,6 +159,19 @@
       let kbOn = false;
       const downSet = new Set();
       let logCount = 0;
+      
+      // Auto-detect host and port from APP_CONFIG if available
+      window.addEventListener('DOMContentLoaded', () => {
+        if (typeof APP_CONFIG !== 'undefined' && APP_CONFIG.BASE_URL) {
+          try {
+            const url = new URL(APP_CONFIG.BASE_URL);
+            document.getElementById('sigHost').value = url.hostname;
+            document.getElementById('sigPort').value = url.port || (url.protocol === 'https:' ? '443' : '80');
+          } catch (e) {
+            console.warn('Failed to parse APP_CONFIG.BASE_URL', e);
+          }
+        }
+      });
       function log(msg, cls) {
         const verbose = document.getElementById("verbose");
         if (!verbose.checked) {

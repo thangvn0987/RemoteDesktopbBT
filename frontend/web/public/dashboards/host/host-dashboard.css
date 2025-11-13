@@ -420,6 +420,113 @@ body {
   font-size: 16px;
 }
 
+/* Host Linking Section */
+.host-linking-section {
+  margin-bottom: 32px;
+}
+
+.link-card {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 24px;
+  text-align: center;
+  margin-bottom: 16px;
+}
+
+.link-card h3 {
+  margin: 0 0 12px;
+  color: var(--text);
+  font-size: 18px;
+  font-weight: 600;
+}
+
+.link-card p {
+  margin: 0 0 20px;
+  color: var(--muted);
+  font-size: 16px;
+}
+
+.download-card {
+  background: linear-gradient(135deg, rgba(66, 133, 244, 0.1), rgba(52, 211, 153, 0.1));
+  border: 1px solid rgba(66, 133, 244, 0.3);
+}
+
+.download-btn {
+  display: inline-block;
+  background: linear-gradient(135deg, var(--accent), #5b8def);
+  color: white;
+  border: none;
+  padding: 14px 32px;
+  border-radius: 8px;
+  font-size: 16px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s;
+  box-shadow: 0 4px 12px rgba(66, 133, 244, 0.3);
+  text-decoration: none;
+}
+
+.download-btn:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 16px rgba(66, 133, 244, 0.4);
+  background: linear-gradient(135deg, #5b8def, var(--accent));
+}
+
+.download-info {
+  margin-top: 12px !important;
+  font-size: 13px !important;
+  color: var(--muted);
+}
+
+.link-btn {
+  background: linear-gradient(135deg, var(--success), #10b981);
+  color: white;
+  border: none;
+  padding: 14px 32px;
+  border-radius: 8px;
+  font-size: 16px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s;
+  box-shadow: 0 4px 12px rgba(52, 211, 153, 0.3);
+}
+
+.link-btn:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 16px rgba(52, 211, 153, 0.4);
+}
+
+.link-btn:active {
+  transform: translateY(0);
+}
+
+.link-status {
+  margin-top: 16px;
+  padding: 12px;
+  border-radius: 8px;
+  font-size: 14px;
+  min-height: 20px;
+}
+
+.link-status.success {
+  background: rgba(52, 211, 153, 0.1);
+  color: var(--success);
+  border: 1px solid rgba(52, 211, 153, 0.3);
+}
+
+.link-status.error {
+  background: rgba(248, 113, 113, 0.1);
+  color: var(--danger);
+  border: 1px solid rgba(248, 113, 113, 0.3);
+}
+
+.link-status.info {
+  background: rgba(66, 133, 244, 0.1);
+  color: var(--accent);
+  border: 1px solid rgba(66, 133, 244, 0.3);
+}
+
 /* Responsive */
 @media (max-width: 768px) {
   .header-content {

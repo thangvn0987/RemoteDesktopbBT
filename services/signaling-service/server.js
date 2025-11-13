@@ -105,7 +105,8 @@ const helperServer = net.createServer((socket) => {
       if (line.startsWith("AUTH ")) {
         const parts = line.split(" ");
         const token = parts[1] || "";
-        if (token === HELPER_TOKEN) {
+        // Accept either HELPER_TOKEN (legacy) or hostToken (starts with "host_")
+        if (token === HELPER_TOKEN || token.startsWith("host_")) {
           console.log("[helper] AUTH ok");
           if (!helperReady) {
             helperReady = true;
@@ -244,8 +245,16 @@ app.post("/session", (req, res) => {
     req.headers["x-forwarded-host"] ||
     req.headers.host ||
     `localhost:${WS_PORT}`;
-  const scheme = process.env.FORCE_WSS === "1" ? "wss" : "ws";
-  const wsUrl = `${scheme}://${host}/?token=${token}`;
+  
+  // Auto-detect WebSocket protocol based on request
+  const isSecure = 
+    req.secure || 
+    req.headers["x-forwarded-proto"] === "https" ||
+    req.headers["x-forwarded-ssl"] === "on" ||
+    process.env.FORCE_WSS === "1";
+  const scheme = isSecure ? "wss" : "ws";
+  
+  const wsUrl = `${scheme}://${host}/ws/?token=${token}`;
   res.json({ sessionId, token, wsUrl, helperReady });
 });
 

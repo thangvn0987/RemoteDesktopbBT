@@ -23,6 +23,9 @@ https://192-168-29-196.nip.io:8444 {
   route /api/host* {
     reverse_proxy auth:8081
   }
+  route /hosts* {
+    reverse_proxy auth:8081
+  }
 
   # Session service
   route /api/session* {
@@ -31,13 +34,19 @@ https://192-168-29-196.nip.io:8444 {
 
   # Signaling (HTTP + WS) – forward both REST and WebSocket upgrades
   route /ws* {
-    reverse_proxy signaling:8080
+    reverse_proxy signaling:8080 {
+      header_up X-Forwarded-Proto {scheme}
+      header_up X-Forwarded-Host {host}
+    }
   }
   route /health* {
     reverse_proxy signaling:8080
   }
   route /session* {
-    reverse_proxy signaling:8080
+    reverse_proxy signaling:8080 {
+      header_up X-Forwarded-Proto {scheme}
+      header_up X-Forwarded-Host {host}
+    }
   }
 
   # Web static portal - CATCH-ALL, must be LAST
