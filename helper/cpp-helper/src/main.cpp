@@ -212,6 +212,13 @@ static bool handle_command(const std::string &line, bool &authed){ auto parts=sp
 	}
 	if(!authed){ std::cout<<"ERR need AUTH first\n"; return true; }
 	if(cmd=="move" && parts.size()>=3){
+		// Throttle MOVE to max 60fps (16ms) to reduce CPU overhead
+		static DWORD lastMoveTime = 0;
+		DWORD now = GetTickCount();
+		if(now - lastMoveTime < 16) {
+			return true; // Skip this MOVE
+		}
+		lastMoveTime = now;
 		int x = std::stoi(parts[1]); int y = std::stoi(parts[2]);
 		g_lastX.store(x); g_lastY.store(y);
 		mouse_move_virtual(x, y);

@@ -278,9 +278,12 @@ server.listen(WS_PORT, () => console.log(`[http+ws] listening on ${WS_PORT}`));
 
 function toHelper(cmd) {
   const line = cmd.endsWith("\n") ? cmd : cmd + "\n";
-  try {
-    console.log("[to-helper]", line.trim());
-  } catch (_) {}
+  // Skip logging MOVE commands to reduce I/O spam
+  if (!line.startsWith("MOVE ")) {
+    try {
+      console.log("[to-helper]", line.trim());
+    } catch (_) {}
+  }
   if (helperReady && helperSocket) {
     helperSocket.write(line);
   } else {
@@ -305,6 +308,11 @@ wss.on("connection", (ws, req) => {
   }
   console.log("[ws] client connected");
   ws.send(JSON.stringify({ type: "welcome", helperReady }));
+
+  // Throttle MOVE commands to reduce spam (30fps max)
+  let lastMoveTime = 0;
+  const MOVE_THROTTLE_MS = 33;
+
   ws.on("message", (raw) => {
     let msg;
     try {
@@ -313,6 +321,11 @@ wss.on("connection", (ws, req) => {
       return;
     }
     if (msg.type === "move") {
+      const now = Date.now();
+      if (now - lastMoveTime < MOVE_THROTTLE_MS) {
+        return; // Drop excessive MOVE messages
+      }
+      lastMoveTime = now;
       toHelper(`MOVE ${msg.x || 0} ${msg.y || 0}`);
     } else if (msg.type === "click") {
       toHelper(`CLICK ${msg.button || "left"}`);
