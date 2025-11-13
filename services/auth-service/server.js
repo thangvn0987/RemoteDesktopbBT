@@ -10,15 +10,30 @@ require("dotenv").config();
 const app = express();
 const PORT = process.env.AUTH_PORT || 8081;
 
+// Enforce HTTPS requirement for Google OAuth in non-localhost scenarios
+const PUBLIC_BASE_URL = process.env.PUBLIC_BASE_URL || 'http://localhost:8081';
+const isLocalhost = /^(http:\/\/)?(localhost|127\.0\.0\.1)(:\d+)?$/i.test(PUBLIC_BASE_URL);
+if (/^http:/.test(PUBLIC_BASE_URL) && !isLocalhost) {
+  console.warn('[auth-service] PUBLIC_BASE_URL is using http:// on a non-localhost domain. Google OAuth requires https:// for non-localhost redirect URIs.');
+  console.warn('[auth-service] Recommendation: use ngrok (ngrok http 80), Cloudflare Tunnel, or a real domain with TLS via Caddy.');
+}
+
 // Database connection
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
 });
 
 // Middleware
+// Allow configuring public origin via env (for gateway + HTTPS)
+const PUBLIC_ORIGIN = process.env.PUBLIC_ORIGIN || "http://localhost:3000";
 app.use(
   cors({
-    origin: ["http://localhost:3000", "http://127.0.0.1:3000"],
+    origin: (origin, cb) => {
+      if (!origin) return cb(null, true);
+      // Accept exact PUBLIC_ORIGIN or same host with https
+      if (origin === PUBLIC_ORIGIN || origin === PUBLIC_ORIGIN.replace(/^http:/, 'https:')) return cb(null, true);
+      return cb(null, false);
+    },
     credentials: true,
     methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
     allowedHeaders: ["Content-Type", "Authorization"],
@@ -47,7 +62,7 @@ if (oauthConfigured) {
         clientSecret: process.env.GOOGLE_CLIENT_SECRET,
         callbackURL:
           process.env.GOOGLE_CALLBACK_URL ||
-          "http://localhost:8081/auth/google/callback",
+          `${PUBLIC_BASE_URL}/auth/google/callback`,
       },
       async (accessToken, refreshToken, profile, done) => {
         try {
@@ -128,7 +143,7 @@ if (oauthConfigured) {
       next();
     },
     passport.authenticate("google", {
-      failureRedirect: "http://localhost:3000/login/login.html",
+      failureRedirect: `${PUBLIC_ORIGIN}/login/login.html`,
       failureFlash: true,
     }),
     async (req, res) => {
@@ -176,7 +191,7 @@ if (oauthConfigured) {
                 window.opener.postMessage({ 
                   type: 'AUTH_SUCCESS', 
                   token: '${sessionToken}' 
-                }, 'http://localhost:3000');
+                }, '${PUBLIC_ORIGIN}');
                 console.log('✅ PostMessage sent to localhost:3000');
                 
                 // Method 2: Wildcard origin as fallback
@@ -208,7 +223,7 @@ if (oauthConfigured) {
     } catch (error) {
       console.error("❌ Session creation error:", error);
       res.redirect(
-        "http://localhost:3000/login/login.html?error=session_failed"
+        `${PUBLIC_ORIGIN}/login/login.html?error=session_failed`
       );
     }
   }
@@ -222,7 +237,7 @@ if (oauthConfigured) {
     });
   });
   app.get("/auth/google/callback", (req, res) => {
-    res.redirect("http://localhost:3000/login/login.html?error=oauth_not_configured");
+    res.redirect(`${PUBLIC_ORIGIN}/login/login.html?error=oauth_not_configured`);
   });
 }
 

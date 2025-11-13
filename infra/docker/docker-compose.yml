@@ -22,6 +22,25 @@ services:
     env_file:
       - ./.env
 
+  gateway:
+    image: caddy:2-alpine
+    container_name: caddy-gateway
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+      - "8444:8444"
+    volumes:
+      - ../gateway/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    env_file:
+      - ./.env
+    depends_on:
+      - web-portal
+      - signaling
+      - auth
+
   auth:
     build: ../../services/auth-service
     image: remotebt/auth:dev
@@ -100,3 +119,5 @@ volumes:
   redis_data:
   pg_data:
   pgadmin_data:
+  caddy_data:
+  caddy_config:

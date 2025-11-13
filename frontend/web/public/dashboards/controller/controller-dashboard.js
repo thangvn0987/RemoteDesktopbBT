@@ -48,7 +48,7 @@
       const token = localStorage.getItem("auth_token");
       // Fire and forget logout API
       if (token) {
-        fetch("http://localhost:8081/auth/logout", {
+        fetch(`${APP_CONFIG.AUTH_BASE}/auth/logout`, {
           method: "POST",
           headers: { Authorization: `Bearer ${token}` },
         }).catch(() => {});
@@ -90,7 +90,7 @@
 
     try {
       const token = localStorage.getItem("auth_token");
-      const response = await fetch("http://localhost:8081/api/hosts", {
+      const response = await fetch(`${APP_CONFIG.AUTH_BASE}/api/hosts`, {
         method: "POST",
         headers: {
           Authorization: `Bearer ${token}`,
@@ -187,7 +187,7 @@
       try {
         const token = localStorage.getItem("auth_token");
         const response = await fetch(
-          `http://localhost:8081/api/hosts/${relationshipId}`,
+          `${APP_CONFIG.AUTH_BASE}/api/hosts/${relationshipId}`,
           {
             method: "DELETE",
             headers: {
@@ -260,7 +260,7 @@
         throw new Error("No auth token");
       }
 
-      const response = await fetch("http://localhost:8081/api/hosts", {
+      const response = await fetch(`${APP_CONFIG.AUTH_BASE}/api/hosts`, {
         headers: {
           Authorization: `Bearer ${token}`,
           "Content-Type": "application/json",
@@ -317,7 +317,7 @@
       const token = localStorage.getItem("auth_token");
       if (!token) throw new Error("No auth token");
 
-      const res = await fetch("http://localhost:8081/auth/verify", {
+      const res = await fetch(`${APP_CONFIG.AUTH_BASE}/auth/verify`, {
         headers: { Authorization: `Bearer ${token}` },
       });
 

@@ -46,7 +46,7 @@
     if (confirm("Are you sure you want to logout?")) {
       const token = localStorage.getItem("auth_token");
       if (token) {
-        fetch("http://localhost:8081/auth/logout", {
+        fetch(`${APP_CONFIG.AUTH_BASE}/auth/logout`, {
           method: "POST",
           headers: { Authorization: `Bearer ${token}` },
         }).catch(() => {});
@@ -95,7 +95,7 @@
         throw new Error("No auth token");
       }
 
-      const response = await fetch("http://localhost:8081/api/host/requests", {
+      const response = await fetch(`${APP_CONFIG.AUTH_BASE}/api/host/requests`, {
         headers: {
           Authorization: `Bearer ${token}`,
           "Content-Type": "application/json",
@@ -153,7 +153,7 @@
       }
 
       const response = await fetch(
-        "http://localhost:8081/api/host/controllers",
+        `${APP_CONFIG.AUTH_BASE}/api/host/controllers`,
         {
           headers: {
             Authorization: `Bearer ${token}`,
@@ -302,7 +302,7 @@
     try {
       const token = localStorage.getItem("auth_token");
       const response = await fetch(
-        `http://localhost:8081/api/host/requests/${requestId}/accept`,
+        `${APP_CONFIG.AUTH_BASE}/api/host/requests/${requestId}/accept`,
         {
           method: "POST",
           headers: {
@@ -339,7 +339,7 @@
     try {
       const token = localStorage.getItem("auth_token");
       const response = await fetch(
-        `http://localhost:8081/api/host/requests/${requestId}/reject`,
+        `${APP_CONFIG.AUTH_BASE}/api/host/requests/${requestId}/reject`,
         {
           method: "POST",
           headers: {
@@ -382,7 +382,7 @@
       try {
         const token = localStorage.getItem("auth_token");
         const response = await fetch(
-          `http://localhost:8081/api/host/controllers/${relationshipId}`,
+          `${APP_CONFIG.AUTH_BASE}/api/host/controllers/${relationshipId}`,
           {
             method: "DELETE",
             headers: {
@@ -462,7 +462,7 @@
       const token = localStorage.getItem("auth_token");
       if (!token) throw new Error("No auth token");
 
-      const res = await fetch("http://localhost:8081/auth/verify", {
+      const res = await fetch(`${APP_CONFIG.AUTH_BASE}/auth/verify`, {
         headers: { Authorization: `Bearer ${token}` },
       });
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
