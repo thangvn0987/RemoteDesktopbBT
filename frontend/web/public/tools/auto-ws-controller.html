@@ -321,7 +321,14 @@
       </div>
       <div class="row">
         <label>Quality</label>
-        <input id="quality" type="range" min="10" max="95" value="75" style="width: 200px" />
+        <input
+          id="quality"
+          type="range"
+          min="10"
+          max="95"
+          value="75"
+          style="width: 200px"
+        />
         <span id="qualityValue">75</span>
         <span style="font-size: 12px; color: #666; margin-left: 8px">
           (10=siêu nhỏ mờ | 50=cân bằng | 95=rõ nét)
@@ -637,16 +644,16 @@
       const qualitySlider = document.getElementById("quality");
       const qualityValue = document.getElementById("qualityValue");
       let isCapturing = false;
-      
+
       qualitySlider.oninput = () => {
         qualityValue.textContent = qualitySlider.value;
       };
-      
+
       qualitySlider.onchange = () => {
         const q = parseInt(qualitySlider.value);
         send({ type: "quality", quality: q });
         log(`Quality set to ${q}`, "ok");
-        
+
         // Restart capture để áp dụng quality mới ngay lập tức
         if (isCapturing) {
           send({ type: "capture", on: false });
@@ -656,7 +663,7 @@
           }, 100);
         }
       };
-      
+
       // Track capture state
       document.getElementById("btnCapOn").onclick = () => {
         isCapturing = true;

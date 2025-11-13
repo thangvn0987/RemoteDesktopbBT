@@ -92,12 +92,13 @@ const helperServer = net.createServer((socket) => {
             width: frameWidth,
             height: frameHeight,
           });
-          const msgSize = Buffer.byteLength(msg, 'utf8');
+          const msgSize = Buffer.byteLength(msg, "utf8");
           if (msgSize > 100000) {
-            console.warn(`[perf] large frame: ${Math.round(msgSize/1024)}KB`);
+            console.warn(`[perf] large frame: ${Math.round(msgSize / 1024)}KB`);
           }
           for (const client of activeConnections) {
-            if (client.readyState === 1) { // WebSocket.OPEN
+            if (client.readyState === 1) {
+              // WebSocket.OPEN
               // Skip if client is too slow (backpressure)
               if (client._pendingFrames >= MAX_PENDING) {
                 console.warn("[ws] skipping frame for slow client");
@@ -177,7 +178,7 @@ const helperServer = net.createServer((socket) => {
         frameExpect = n > 0 ? n : -1;
         // Parse optional resolution (e.g., "1920x1080")
         if (parts[2] && parts[2].includes("x")) {
-          const [w, h] = parts[2].split("x").map(s => parseInt(s, 10));
+          const [w, h] = parts[2].split("x").map((s) => parseInt(s, 10));
           if (w > 0 && h > 0) {
             frameWidth = w;
             frameHeight = h;
@@ -355,7 +356,7 @@ wss.on("connection", (ws, req) => {
     ws.close(4008, "connection limit");
     return;
   }
-  
+
   activeConnections.add(ws);
   console.log(`[ws] client connected (${activeConnections.size} active)`);
   ws.send(JSON.stringify({ type: "welcome", helperReady }));
@@ -417,7 +418,10 @@ wss.on("connection", (ws, req) => {
       else toHelper("CAPTURE OFF");
     } else if (msg.type === "quality") {
       // JPEG quality control (1-100, lower=smaller, higher=better)
-      const quality = Math.max(1, Math.min(100, parseInt(msg.quality || "75", 10)));
+      const quality = Math.max(
+        1,
+        Math.min(100, parseInt(msg.quality || "75", 10))
+      );
       toHelper(`QUALITY ${quality}`);
       console.log("[ws] quality set to", quality);
     } else if (msg.type === "ping") {

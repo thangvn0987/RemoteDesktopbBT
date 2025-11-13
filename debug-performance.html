@@ -1,195 +1,210 @@
 <!DOCTYPE html>
 <html>
-<head>
-    <meta charset="UTF-8">
+  <head>
+    <meta charset="UTF-8" />
     <title>WebSocket Performance Debug</title>
     <style>
-        body {
-            font-family: monospace;
-            background: #1a1a1a;
-            color: #fff;
-            padding: 20px;
-        }
-        .metrics {
-            background: #2a2a2a;
-            padding: 15px;
-            margin: 10px 0;
-            border-radius: 5px;
-        }
-        .good { color: #34d399; }
-        .warn { color: #fbbf24; }
-        .bad { color: #f87171; }
-        button {
-            background: #3b82f6;
-            color: white;
-            border: none;
-            padding: 10px 20px;
-            border-radius: 5px;
-            cursor: pointer;
-            margin: 5px;
-        }
-        button:hover { background: #2563eb; }
-        #log {
-            background: #000;
-            padding: 10px;
-            height: 300px;
-            overflow-y: auto;
-            font-size: 12px;
-            border-radius: 5px;
-        }
+      body {
+        font-family: monospace;
+        background: #1a1a1a;
+        color: #fff;
+        padding: 20px;
+      }
+      .metrics {
+        background: #2a2a2a;
+        padding: 15px;
+        margin: 10px 0;
+        border-radius: 5px;
+      }
+      .good {
+        color: #34d399;
+      }
+      .warn {
+        color: #fbbf24;
+      }
+      .bad {
+        color: #f87171;
+      }
+      button {
+        background: #3b82f6;
+        color: white;
+        border: none;
+        padding: 10px 20px;
+        border-radius: 5px;
+        cursor: pointer;
+        margin: 5px;
+      }
+      button:hover {
+        background: #2563eb;
+      }
+      #log {
+        background: #000;
+        padding: 10px;
+        height: 300px;
+        overflow-y: auto;
+        font-size: 12px;
+        border-radius: 5px;
+      }
     </style>
-</head>
-<body>
+  </head>
+  <body>
     <h1>WebSocket Performance Monitor</h1>
-    
+
     <div class="metrics">
-        <div>WebSocket: <span id="wsStatus">disconnected</span></div>
-        <div>Ping: <span id="ping">-</span></div>
-        <div>Frame Rate: <span id="fps">0</span> FPS</div>
-        <div>Avg Frame Size: <span id="frameSize">0</span> KB</div>
-        <div>Frame Queue: <span id="queue">0</span></div>
-        <div>Total Frames: <span id="totalFrames">0</span></div>
-        <div>Dropped Frames: <span id="dropped">0</span></div>
+      <div>WebSocket: <span id="wsStatus">disconnected</span></div>
+      <div>Ping: <span id="ping">-</span></div>
+      <div>Frame Rate: <span id="fps">0</span> FPS</div>
+      <div>Avg Frame Size: <span id="frameSize">0</span> KB</div>
+      <div>Frame Queue: <span id="queue">0</span></div>
+      <div>Total Frames: <span id="totalFrames">0</span></div>
+      <div>Dropped Frames: <span id="dropped">0</span></div>
     </div>
 
     <div>
-        <button onclick="connect()">Connect</button>
-        <button onclick="disconnect()">Disconnect</button>
-        <button onclick="clearLog()">Clear Log</button>
+      <button onclick="connect()">Connect</button>
+      <button onclick="disconnect()">Disconnect</button>
+      <button onclick="clearLog()">Clear Log</button>
     </div>
 
     <div id="log"></div>
 
     <script>
-        let ws = null;
-        let pingStart = 0;
-        let frameCount = 0;
-        let totalFrameSize = 0;
-        let droppedFrames = 0;
-        let lastFpsUpdate = Date.now();
-        let framesInLastSecond = 0;
-        let processingFrame = false;
-        
-        const wsUrl = "wss://192-168-29-196.nip.io:8444/ws/?token=dev-token-replace-me";
+      let ws = null;
+      let pingStart = 0;
+      let frameCount = 0;
+      let totalFrameSize = 0;
+      let droppedFrames = 0;
+      let lastFpsUpdate = Date.now();
+      let framesInLastSecond = 0;
+      let processingFrame = false;
 
-        function log(msg, color = "#fff") {
-            const logEl = document.getElementById("log");
-            const time = new Date().toLocaleTimeString();
-            logEl.innerHTML += `<div style="color:${color}">[${time}] ${msg}</div>`;
-            logEl.scrollTop = logEl.scrollHeight;
+      const wsUrl =
+        "wss://192-168-29-196.nip.io:8444/ws/?token=dev-token-replace-me";
+
+      function log(msg, color = "#fff") {
+        const logEl = document.getElementById("log");
+        const time = new Date().toLocaleTimeString();
+        logEl.innerHTML += `<div style="color:${color}">[${time}] ${msg}</div>`;
+        logEl.scrollTop = logEl.scrollHeight;
+      }
+
+      function clearLog() {
+        document.getElementById("log").innerHTML = "";
+      }
+
+      function updateMetric(id, value, color = null) {
+        const el = document.getElementById(id);
+        el.textContent = value;
+        if (color) el.style.color = color;
+      }
+
+      function connect() {
+        if (ws) {
+          log("Already connected", "#fbbf24");
+          return;
         }
 
-        function clearLog() {
-            document.getElementById("log").innerHTML = "";
-        }
+        log("Connecting to " + wsUrl, "#3b82f6");
+        ws = new WebSocket(wsUrl);
 
-        function updateMetric(id, value, color = null) {
-            const el = document.getElementById(id);
-            el.textContent = value;
-            if (color) el.style.color = color;
-        }
+        ws.onopen = () => {
+          updateMetric("wsStatus", "connected", "#34d399");
+          log("Connected!", "#34d399");
 
-        function connect() {
-            if (ws) {
-                log("Already connected", "#fbbf24");
+          // Start ping monitoring
+          setInterval(() => {
+            if (ws && ws.readyState === 1) {
+              pingStart = Date.now();
+              ws.send(JSON.stringify({ type: "ping" }));
+            }
+          }, 1000);
+
+          // Request screen capture
+          ws.send(JSON.stringify({ type: "capture", on: true, interval: 500 }));
+        };
+
+        ws.onmessage = (ev) => {
+          const msgSize = new Blob([ev.data]).size;
+
+          try {
+            const m = JSON.parse(ev.data);
+
+            if (m.type === "pong") {
+              const latency = Date.now() - pingStart;
+              const color =
+                latency < 50
+                  ? "#34d399"
+                  : latency < 150
+                  ? "#fbbf24"
+                  : "#f87171";
+              updateMetric("ping", latency + "ms", color);
+              log(`Ping: ${latency}ms`, color);
+            } else if (m.type === "frame") {
+              if (processingFrame) {
+                droppedFrames++;
+                updateMetric("dropped", droppedFrames, "#f87171");
                 return;
+              }
+
+              processingFrame = true;
+              const frameSize = msgSize / 1024; // KB
+              frameCount++;
+              framesInLastSecond++;
+              totalFrameSize += frameSize;
+
+              updateMetric("totalFrames", frameCount);
+              updateMetric(
+                "frameSize",
+                Math.round(totalFrameSize / frameCount) + " KB"
+              );
+              updateMetric("queue", processingFrame ? 1 : 0);
+
+              // Update FPS
+              const now = Date.now();
+              if (now - lastFpsUpdate >= 1000) {
+                updateMetric("fps", framesInLastSecond);
+                framesInLastSecond = 0;
+                lastFpsUpdate = now;
+              }
+
+              if (frameSize > 100) {
+                log(`Large frame: ${Math.round(frameSize)}KB`, "#f87171");
+              }
+
+              // Simulate processing delay
+              setTimeout(() => {
+                processingFrame = false;
+              }, 10);
+            } else if (m.type === "welcome") {
+              log("Received welcome", "#34d399");
             }
+          } catch (e) {
+            log("Parse error: " + e.message, "#f87171");
+          }
+        };
 
-            log("Connecting to " + wsUrl, "#3b82f6");
-            ws = new WebSocket(wsUrl);
-            
-            ws.onopen = () => {
-                updateMetric("wsStatus", "connected", "#34d399");
-                log("Connected!", "#34d399");
-                
-                // Start ping monitoring
-                setInterval(() => {
-                    if (ws && ws.readyState === 1) {
-                        pingStart = Date.now();
-                        ws.send(JSON.stringify({ type: "ping" }));
-                    }
-                }, 1000);
+        ws.onerror = (e) => {
+          updateMetric("wsStatus", "error", "#f87171");
+          log("WebSocket error", "#f87171");
+        };
 
-                // Request screen capture
-                ws.send(JSON.stringify({ type: "capture", on: true, interval: 500 }));
-            };
+        ws.onclose = () => {
+          updateMetric("wsStatus", "disconnected", "#9ca3af");
+          log("Disconnected", "#9ca3af");
+          ws = null;
+        };
+      }
 
-            ws.onmessage = (ev) => {
-                const msgSize = new Blob([ev.data]).size;
-                
-                try {
-                    const m = JSON.parse(ev.data);
-                    
-                    if (m.type === "pong") {
-                        const latency = Date.now() - pingStart;
-                        const color = latency < 50 ? "#34d399" : latency < 150 ? "#fbbf24" : "#f87171";
-                        updateMetric("ping", latency + "ms", color);
-                        log(`Ping: ${latency}ms`, color);
-                    }
-                    else if (m.type === "frame") {
-                        if (processingFrame) {
-                            droppedFrames++;
-                            updateMetric("dropped", droppedFrames, "#f87171");
-                            return;
-                        }
-                        
-                        processingFrame = true;
-                        const frameSize = msgSize / 1024; // KB
-                        frameCount++;
-                        framesInLastSecond++;
-                        totalFrameSize += frameSize;
-                        
-                        updateMetric("totalFrames", frameCount);
-                        updateMetric("frameSize", Math.round(totalFrameSize / frameCount) + " KB");
-                        updateMetric("queue", processingFrame ? 1 : 0);
-                        
-                        // Update FPS
-                        const now = Date.now();
-                        if (now - lastFpsUpdate >= 1000) {
-                            updateMetric("fps", framesInLastSecond);
-                            framesInLastSecond = 0;
-                            lastFpsUpdate = now;
-                        }
-                        
-                        if (frameSize > 100) {
-                            log(`Large frame: ${Math.round(frameSize)}KB`, "#f87171");
-                        }
-                        
-                        // Simulate processing delay
-                        setTimeout(() => {
-                            processingFrame = false;
-                        }, 10);
-                    }
-                    else if (m.type === "welcome") {
-                        log("Received welcome", "#34d399");
-                    }
-                } catch (e) {
-                    log("Parse error: " + e.message, "#f87171");
-                }
-            };
-
-            ws.onerror = (e) => {
-                updateMetric("wsStatus", "error", "#f87171");
-                log("WebSocket error", "#f87171");
-            };
-
-            ws.onclose = () => {
-                updateMetric("wsStatus", "disconnected", "#9ca3af");
-                log("Disconnected", "#9ca3af");
-                ws = null;
-            };
+      function disconnect() {
+        if (ws) {
+          ws.close();
+          ws = null;
+          log("Manually disconnected", "#9ca3af");
         }
+      }
 
-        function disconnect() {
-            if (ws) {
-                ws.close();
-                ws = null;
-                log("Manually disconnected", "#9ca3af");
-            }
-        }
-
-        // Auto-connect on load
-        // setTimeout(connect, 500);
+      // Auto-connect on load
+      // setTimeout(connect, 500);
     </script>
-</body>
+  </body>
 </html>
