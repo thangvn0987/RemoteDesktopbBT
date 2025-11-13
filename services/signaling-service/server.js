@@ -66,6 +66,7 @@ const helperServer = net.createServer((socket) => {
 
   let bufAcc = Buffer.alloc(0);
   let frameExpect = -1; // expecting N bytes of base64
+  // Clipboard line buffer (simple lines 'CLIP <base64>') handled like GEOM
 
   socket.on("data", (chunk) => {
     bufAcc = Buffer.concat([bufAcc, chunk]);
@@ -104,7 +105,8 @@ const helperServer = net.createServer((socket) => {
       if (line.startsWith("AUTH ")) {
         const parts = line.split(" ");
         const token = parts[1] || "";
-        if (token === HELPER_TOKEN) {
+        // Accept either HELPER_TOKEN (legacy) or hostToken (starts with "host_")
+        if (token === HELPER_TOKEN || token.startsWith("host_")) {
           console.log("[helper] AUTH ok");
           if (!helperReady) {
             helperReady = true;
@@ -166,6 +168,18 @@ const helperServer = net.createServer((socket) => {
               client.send(msg);
             } catch (_) {}
           }
+        }
+      } else if (line.startsWith("CLIP ")) {
+        const b64 = line.substring(5).trim();
+        let text = "";
+        try {
+          text = Buffer.from(b64, "base64").toString("utf8");
+        } catch (_) {}
+        const msg = JSON.stringify({ type: "clip", text, base64: b64 });
+        for (const client of wss.clients) {
+          try {
+            client.send(msg);
+          } catch (_) {}
         }
       } else {
         // ignore other lines
@@ -231,8 +245,16 @@ app.post("/session", (req, res) => {
     req.headers["x-forwarded-host"] ||
     req.headers.host ||
     `localhost:${WS_PORT}`;
-  const scheme = process.env.FORCE_WSS === "1" ? "wss" : "ws";
-  const wsUrl = `${scheme}://${host}/?token=${token}`;
+
+  // Auto-detect WebSocket protocol based on request
+  const isSecure =
+    req.secure ||
+    req.headers["x-forwarded-proto"] === "https" ||
+    req.headers["x-forwarded-ssl"] === "on" ||
+    process.env.FORCE_WSS === "1";
+  const scheme = isSecure ? "wss" : "ws";
+
+  const wsUrl = `${scheme}://${host}/ws/?token=${token}`;
   res.json({ sessionId, token, wsUrl, helperReady });
 });
 
@@ -314,6 +336,12 @@ wss.on("connection", (ws, req) => {
       else toHelper("CAPTURE OFF");
     } else if (msg.type === "ping") {
       ws.send(JSON.stringify({ type: "pong" }));
+    } else if (msg.type === "clipGet") {
+      toHelper("CLIPGET");
+    } else if (msg.type === "clipSet") {
+      const text = msg.text || "";
+      const b64 = Buffer.from(text, "utf8").toString("base64");
+      toHelper(`CLIPSET ${b64}`);
     }
   });
 });

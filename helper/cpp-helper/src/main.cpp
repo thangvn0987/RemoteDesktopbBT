@@ -125,6 +125,19 @@ static std::string base64_encode(const unsigned char* data, size_t len){
 	for(size_t i=0;i<len;i+=3){ unsigned a=data[i]; unsigned b=(i+1<len)?data[i+1]:0; unsigned c=(i+2<len)?data[i+2]:0; out.push_back(B64TAB[(a>>2)&0x3F]); out.push_back(B64TAB[((a&0x3)<<4)|((b>>4)&0xF)]); out.push_back(i+1<len? B64TAB[((b&0xF)<<2)|((c>>6)&0x3)] : '='); out.push_back(i+2<len? B64TAB[c&0x3F] : '='); }
 	return out;
 }
+static std::vector<unsigned char> base64_decode(const std::string &in){
+	static int T[256]; static bool init=false; if(!init){ for(int i=0;i<256;++i) T[i]=-1; for(int i=0;i<64;++i) T[(unsigned char)B64TAB[i]]=i; init=true; }
+	std::vector<unsigned char> out; int val=0, valb=-8; for(unsigned char c: in){ if(T[c]==-1){ if(c=='=') break; else continue; } val=(val<<6)+T[c]; valb+=6; if(valb>=0){ out.push_back((unsigned char)((val>>valb)&0xFF)); valb-=8; } } return out;
+}
+
+// Clipboard helpers (Unicode text only)
+static bool set_clipboard_text_utf8(const std::string &txt){
+	if(!OpenClipboard(nullptr)) return false; if(!EmptyClipboard()){ CloseClipboard(); return false; }
+	std::wstring w = utf8_to_wide(txt); size_t bytes = (w.size()+1)*sizeof(wchar_t);
+	HGLOBAL hMem = GlobalAlloc(GMEM_MOVEABLE, bytes); if(!hMem){ CloseClipboard(); return false; }
+	wchar_t* ptr = (wchar_t*)GlobalLock(hMem); memcpy(ptr, w.c_str(), bytes); GlobalUnlock(hMem);
+	SetClipboardData(CF_UNICODETEXT, hMem); CloseClipboard(); return true; }
+static std::string get_clipboard_text_utf8(){ std::string out; if(!OpenClipboard(nullptr)) return out; HANDLE h = GetClipboardData(CF_UNICODETEXT); if(h){ wchar_t* w = (wchar_t*)GlobalLock(h); if(w){ size_t len=wcslen(w); int need = WideCharToMultiByte(CP_UTF8,0,w,(int)len,nullptr,0,nullptr,nullptr); out.resize(need); if(need>0) WideCharToMultiByte(CP_UTF8,0,w,(int)len,&out[0],need,nullptr,nullptr); GlobalUnlock(h);} } CloseClipboard(); return out; }
 
 // Bring window under last pointer to the foreground to ensure it receives keystrokes
 static void focus_window_under_last_pointer(){
@@ -190,7 +203,13 @@ static void capture_loop(){
 }
 
 static bool handle_command(const std::string &line, bool &authed){ auto parts=split_ws(line); if(parts.empty()) return true; std::string cmd=parts[0]; for(char &c:cmd)c=(char)tolower(c);
-	if(cmd=="auth"){ if(parts.size()>=2 && parts[1]==TOKEN){ authed=true; std::cout<<"OK auth\n"; } else std::cout<<"ERR auth\n"; return true; }
+	if(cmd=="auth"){ 
+		// In agent mode (authed=true), ignore AUTH from server (server sends AUTH as compat check)
+		if(authed) return true;
+		// In server mode (authed=false), verify AUTH from client
+		if(parts.size()>=2 && parts[1]==TOKEN){ authed=true; std::cout<<"OK auth\n"; } else std::cout<<"ERR auth\n"; 
+		return true; 
+	}
 	if(!authed){ std::cout<<"ERR need AUTH first\n"; return true; }
 	if(cmd=="move" && parts.size()>=3){
 		int x = std::stoi(parts[1]); int y = std::stoi(parts[2]);
@@ -234,11 +253,216 @@ static bool handle_command(const std::string &line, bool &authed){ auto parts=sp
 			return true;
 		}
 	if(cmd=="capture"){ if(parts.size()>=2){ std::string onoff=parts[1]; for(char &c:onoff)c=(char)tolower(c); if(onoff=="on"){ if(parts.size()>=3) g_capture_interval_ms = std::max(100, std::stoi(parts[2])); if(!g_capture){ g_capture=true; g_capture_thread=std::thread(capture_loop);} std::cout<<"OK\n"; return true; } else if(onoff=="off"){ if(g_capture){ g_capture=false; if(g_capture_thread.joinable()) g_capture_thread.join(); } std::cout<<"OK\n"; return true; } } std::cout<<"ERR usage CAPTURE ON [interval_ms]|OFF\n"; return true; }
+	// Clipboard set: CLIPSET <base64>
+	if(cmd=="clipset" && parts.size()>=2){ std::string b64 = parts[1]; auto bytes = base64_decode(b64); std::string utf8(bytes.begin(), bytes.end()); bool ok = set_clipboard_text_utf8(utf8); std::cout<<(ok?"OK clipset\n":"ERR clipset\n"); return true; }
+	// Clipboard get: CLIPGET -> outputs CLIP <base64>
+	if(cmd=="clipget"){ std::string utf8 = get_clipboard_text_utf8(); std::string b64 = base64_encode((const unsigned char*)utf8.data(), utf8.size()); std::cout<<"CLIP "<<b64<<"\n"; return true; }
 	if(cmd=="quit") return false;
 	std::cout<<"ERR unknown\n"; return true; }
 
 static int run_server(uint16_t port){ if(!Tcp::init()){ std::fprintf(stderr,"WSA init failed\n"); return 1; } Tcp srv,cli; if(!tcp_listen(port,srv)){ std::fprintf(stderr,"bind/listen failed (port %u, err=%lu)\n", port, GetLastError()); Tcp::done(); return 2; } std::printf("[server] listening on %u\n", port); if(!tcp_accept(srv,cli)){ std::fprintf(stderr,"accept failed (err=%lu)\n", GetLastError()); srv.close(); Tcp::done(); return 3; } g_client_sock = cli.s; std::printf("[server] client connected\n"); std::string acc; acc.reserve(4096); char buf[1024]; bool authed=false; while(true){ int n=tcp_recv(cli,buf,sizeof(buf)); if(n<=0) break; for(int i=0;i<n;++i){ char ch=buf[i]; if(ch=='\n'){ bool cont=handle_command(acc,authed); acc.clear(); if(!cont){ cli.close(); srv.close(); Tcp::done(); return 0; } } else if(ch!='\r'){ acc.push_back(ch);} } } if(g_capture){ g_capture=false; if(g_capture_thread.joinable()) g_capture_thread.join(); } g_client_sock=INVALID_SOCKET; cli.close(); srv.close(); Tcp::done(); return 0; }
 static int run_client(const std::string &host,uint16_t port,bool demo){ if(!Tcp::init()){ std::fprintf(stderr,"WSA init failed\n"); return 1; } Tcp cli; if(!tcp_connect(host,port,cli)){ std::fprintf(stderr,"connect failed %s:%u (err=%lu)\n", host.c_str(), port, GetLastError()); Tcp::done(); return 2; } auto sendline=[&](const std::string &l){ std::string ln=l; if(ln.empty()||ln.back()!='\n') ln+="\n"; tcp_send(cli, ln); }; sendline("AUTH "+TOKEN); if(demo){ sendline("MOVE 600 400"); sleep_ms(150); sendline("CLICK left"); sleep_ms(150); sendline("TYPE Hello from RemoteBT demo!"); sleep_ms(150); sendline("KEY Enter"); sendline("QUIT"); } else { std::cout<<"Connected. Commands: MOVE x y | CLICK left | TYPE text | KEY ctrl+v | SCROLL 120 | QUIT\n"; std::string line; while(std::getline(std::cin,line)){ if(line.empty()) continue; sendline(line); if(line=="QUIT"||line=="quit") break; } } cli.close(); Tcp::done(); return 0; }
+
+// Simple HTTP response helper
+static void send_http_response(SOCKET s, int status_code, const std::string &status_text, const std::string &body) {
+	std::string headers = "HTTP/1.1 " + std::to_string(status_code) + " " + status_text + "\r\n";
+	headers += "Content-Type: application/json\r\n";
+	headers += "Content-Length: " + std::to_string(body.size()) + "\r\n";
+	headers += "Access-Control-Allow-Origin: *\r\n";
+	headers += "Connection: close\r\n\r\n";
+	std::string response = headers + body;
+	send(s, response.c_str(), (int)response.size(), 0);
+}
+
+// Read config.json and extract server_host, port, and token
+static bool read_config(std::string &server_host, uint16_t &port, std::string &token) {
+	FILE *f = fopen("config.json", "r");
+	if(!f) return false;
+	
+	fseek(f, 0, SEEK_END);
+	long sz = ftell(f);
+	fseek(f, 0, SEEK_SET);
+	
+	std::string content(sz, '\0');
+	fread(&content[0], 1, sz, f);
+	fclose(f);
+	
+	// Simple JSON parsing: find "server_host":"value" and "token":"value"
+	size_t hostPos = content.find("\"server_host\"");
+	if(hostPos != std::string::npos) {
+		size_t colonPos = content.find(":", hostPos);
+		size_t quoteStart = content.find("\"", colonPos);
+		size_t quoteEnd = content.find("\"", quoteStart + 1);
+		if(quoteStart != std::string::npos && quoteEnd != std::string::npos) {
+			server_host = content.substr(quoteStart + 1, quoteEnd - quoteStart - 1);
+		}
+	}
+	
+	size_t tokenPos = content.find("\"token\"");
+	if(tokenPos != std::string::npos) {
+		size_t colonPos = content.find(":", tokenPos);
+		size_t quoteStart = content.find("\"", colonPos);
+		size_t quoteEnd = content.find("\"", quoteStart + 1);
+		if(quoteStart != std::string::npos && quoteEnd != std::string::npos) {
+			token = content.substr(quoteStart + 1, quoteEnd - quoteStart - 1);
+		}
+	}
+	
+	size_t portPos = content.find("\"port\"");
+	if(portPos != std::string::npos) {
+		size_t colonPos = content.find(":", portPos);
+		size_t numStart = colonPos + 1;
+		while(numStart < content.size() && (content[numStart] == ' ' || content[numStart] == '\t')) numStart++;
+		size_t numEnd = numStart;
+		while(numEnd < content.size() && content[numEnd] >= '0' && content[numEnd] <= '9') numEnd++;
+		if(numEnd > numStart) {
+			port = (uint16_t)std::stoi(content.substr(numStart, numEnd - numStart));
+		}
+	}
+	
+	return !server_host.empty() && !token.empty() && port > 0;
+}
+
+// Mini HTTP server for config mode
+static int run_config_server(uint16_t port) {
+	if(!Tcp::init()){ std::fprintf(stderr,"WSA init failed\n"); return 1; }
+	Tcp srv;
+	if(!tcp_listen(port, srv)){
+		std::fprintf(stderr,"[config] bind/listen failed on port %u (err=%lu)\n", port, GetLastError());
+		Tcp::done();
+		return 2;
+	}
+	std::printf("[config] HTTP server listening on localhost:%u\n", port);
+	std::printf("[config] Waiting for configuration from web dashboard...\n");
+	
+	while(true) {
+		Tcp cli;
+		if(!tcp_accept(srv, cli)) continue;
+		
+		// Read HTTP request
+		std::string req;
+		char buf[4096];
+		int n = tcp_recv(cli, buf, sizeof(buf)-1);
+		if(n <= 0) { cli.close(); continue; }
+		buf[n] = '\0';
+		req = buf;
+		
+		// Parse first line: POST /config HTTP/1.1
+		size_t firstLine = req.find("\r\n");
+		if(firstLine == std::string::npos) { cli.close(); continue; }
+		std::string method = req.substr(0, req.find(' '));
+		
+		// Handle OPTIONS (CORS preflight)
+		if(method == "OPTIONS") {
+			std::string resp = "HTTP/1.1 204 No Content\r\n";
+			resp += "Access-Control-Allow-Origin: *\r\n";
+			resp += "Access-Control-Allow-Methods: POST, OPTIONS\r\n";
+			resp += "Access-Control-Allow-Headers: Content-Type\r\n";
+			resp += "Connection: close\r\n\r\n";
+			send(cli.s, resp.c_str(), (int)resp.size(), 0);
+			cli.close();
+			continue;
+		}
+		
+		// Handle POST /config
+		if(method != "POST") {
+			send_http_response(cli.s, 405, "Method Not Allowed", "{\"error\":\"Only POST allowed\"}");
+			cli.close();
+			continue;
+		}
+		
+		// Extract JSON body (after \r\n\r\n)
+		size_t bodyStart = req.find("\r\n\r\n");
+		if(bodyStart == std::string::npos) {
+			send_http_response(cli.s, 400, "Bad Request", "{\"error\":\"No body found\"}");
+			cli.close();
+			continue;
+		}
+		std::string body = req.substr(bodyStart + 4);
+		
+		// Simple JSON parsing: find "server_host":"value", "port":number, and "token":"value"
+		std::string server_host, token;
+		uint16_t port = 5555;
+		size_t hostPos = body.find("\"server_host\"");
+		if(hostPos != std::string::npos) {
+			size_t colonPos = body.find(":", hostPos);
+			size_t quoteStart = body.find("\"", colonPos);
+			size_t quoteEnd = body.find("\"", quoteStart + 1);
+			if(quoteStart != std::string::npos && quoteEnd != std::string::npos) {
+				server_host = body.substr(quoteStart + 1, quoteEnd - quoteStart - 1);
+			}
+		}
+		size_t portPos = body.find("\"port\"");
+		if(portPos != std::string::npos) {
+			size_t colonPos = body.find(":", portPos);
+			size_t numStart = colonPos + 1;
+			while(numStart < body.size() && (body[numStart] == ' ' || body[numStart] == '\t')) numStart++;
+			size_t numEnd = numStart;
+			while(numEnd < body.size() && body[numEnd] >= '0' && body[numEnd] <= '9') numEnd++;
+			if(numEnd > numStart) {
+				port = (uint16_t)std::stoi(body.substr(numStart, numEnd - numStart));
+			}
+		}
+		size_t tokenPos = body.find("\"token\"");
+		if(tokenPos != std::string::npos) {
+			size_t colonPos = body.find(":", tokenPos);
+			size_t quoteStart = body.find("\"", colonPos);
+			size_t quoteEnd = body.find("\"", quoteStart + 1);
+			if(quoteStart != std::string::npos && quoteEnd != std::string::npos) {
+				token = body.substr(quoteStart + 1, quoteEnd - quoteStart - 1);
+			}
+		}
+		
+		if(server_host.empty() || token.empty()) {
+			send_http_response(cli.s, 400, "Bad Request", "{\"error\":\"Missing server_host or token\"}");
+			cli.close();
+			continue;
+		}
+		
+		// Write config.json
+		std::string configJson = "{\n  \"server_host\": \"" + server_host + "\",\n  \"port\": " + std::to_string(port) + ",\n  \"token\": \"" + token + "\"\n}";
+		FILE *f = fopen("config.json", "w");
+		if(!f) {
+			send_http_response(cli.s, 500, "Internal Server Error", "{\"error\":\"Failed to write config.json\"}");
+			cli.close();
+			continue;
+		}
+		fprintf(f, "%s", configJson.c_str());
+		fclose(f);
+		
+		std::printf("[config] Configuration saved to config.json\n");
+		std::printf("[config] Server: %s:%u, Token: %s...\n", server_host.c_str(), port, token.substr(0, 8).c_str());
+		
+		// Send success response
+		send_http_response(cli.s, 200, "OK", "{\"success\":true,\"message\":\"Configuration saved. Restarting agent...\"}");
+		cli.close();
+		srv.close();
+		Tcp::done();
+		
+		// Restart process
+		char exePath[MAX_PATH];
+		GetModuleFileNameA(NULL, exePath, MAX_PATH);
+		
+		STARTUPINFOA si = {0};
+		si.cb = sizeof(si);
+		PROCESS_INFORMATION pi = {0};
+		
+		std::string cmdLine = std::string(exePath) + " --agent --host " + server_host + " --port " + std::to_string(port) + " --token " + token;
+		if(CreateProcessA(NULL, (LPSTR)cmdLine.c_str(), NULL, NULL, FALSE, 0, NULL, NULL, &si, &pi)) {
+			CloseHandle(pi.hProcess);
+			CloseHandle(pi.hThread);
+			std::printf("[config] Restarted as agent. Exiting config server.\n");
+			return 0;
+		} else {
+			std::fprintf(stderr, "[config] Failed to restart (err=%lu). Please restart manually.\n", GetLastError());
+			return 1;
+		}
+	}
+	
+	srv.close();
+	Tcp::done();
+	return 0;
+}
 
 int main(int argc,char **argv){
 	// init GDI+
@@ -254,9 +478,58 @@ int main(int argc,char **argv){
 			if(setDpiAware) setDpiAware();
 		}
 	}
-	bool isServer=false,isClient=false,isAgent=false,demo=false; std::string host="127.0.0.1"; uint16_t port=5555; for(int i=1;i<argc;++i){ std::string a=argv[i]; if(a=="--server") isServer=true; else if(a=="--client") isClient=true; else if(a=="--agent") isAgent=true; else if(a=="--demo") demo=true; else if(a=="--host" && i+1<argc) host=argv[++i]; else if(a=="--port" && i+1<argc) port=(uint16_t)std::stoi(argv[++i]); else if(a=="--token" && i+1<argc) TOKEN=argv[++i]; else if(a=="-h"||a=="--help"){ std::puts("Usage:\n  remotebt_helper --server [--port 5555] [--token dev-secret]\n  remotebt_helper --client --host <ip> [--port 5555] [--token dev-secret] [--demo]\n  remotebt_helper --agent --host <ip> [--port 5555] [--token dev-secret]\n\nModes:\n  --server : listen for commands on TCP (legacy local testing)\n  --client : send commands interactively to a remote server (dev tool)\n  --agent  : connect OUTBOUND to signaling and receive control commands (recommended)"); Gdiplus::GdiplusShutdown(gdipToken); return 0; } }
-	int selected = (isServer?1:0)+(isClient?1:0)+(isAgent?1:0);
-	if(selected!=1){ std::puts("Pick exactly one mode: --server OR --client OR --agent\nUse -h for help."); Gdiplus::GdiplusShutdown(gdipToken); return 0; }
+	
+	// Parse command line arguments
+	bool isServer=false,isClient=false,isAgent=false,isConfig=false,demo=false; 
+	std::string host="127.0.0.1"; 
+	uint16_t port=5555; 
+	uint16_t configPort=12345;
+	
+	for(int i=1;i<argc;++i){ 
+		std::string a=argv[i]; 
+		if(a=="--server") isServer=true; 
+		else if(a=="--client") isClient=true; 
+		else if(a=="--agent") isAgent=true; 
+		else if(a=="--config") isConfig=true;
+		else if(a=="--demo") demo=true; 
+		else if(a=="--host" && i+1<argc) host=argv[++i]; 
+		else if(a=="--port" && i+1<argc) port=(uint16_t)std::stoi(argv[++i]); 
+		else if(a=="--token" && i+1<argc) TOKEN=argv[++i]; 
+		else if(a=="-h"||a=="--help"){ 
+			std::puts("Usage:\n  remotebt_helper --server [--port 5555] [--token dev-secret]\n  remotebt_helper --client --host <ip> [--port 5555] [--token dev-secret] [--demo]\n  remotebt_helper --agent [--host <ip>] [--port 5555] [--token dev-secret]\n  remotebt_helper --config [config port defaults to 12345]\n\nModes:\n  --server : listen for commands on TCP (legacy local testing)\n  --client : send commands interactively to a remote server (dev tool)\n  --agent  : connect OUTBOUND to signaling and receive control commands (recommended)\n  --config : HTTP server for receiving configuration from web dashboard (auto mode)\n\nAuto-configuration:\n  If config.json exists and no mode specified, automatically runs as --agent with stored config."); 
+			Gdiplus::GdiplusShutdown(gdipToken); 
+			return 0; 
+		} 
+	}
+	
+	int selected = (isServer?1:0)+(isClient?1:0)+(isAgent?1:0)+(isConfig?1:0);
+	
+	// Auto mode: if no mode specified and config.json exists, read config and run as agent
+	if(selected == 0) {
+		std::string config_host, config_token;
+		uint16_t config_port = 5555;
+		if(read_config(config_host, config_port, config_token)) {
+			std::printf("[auto] Found config.json, starting as agent...\n");
+			std::printf("[auto] Server: %s:%u, Token: %s...\n", config_host.c_str(), config_port, config_token.substr(0, 8).c_str());
+			host = config_host;
+			port = config_port;
+			TOKEN = config_token;
+			isAgent = true;
+			selected = 1;
+		} else {
+			// No config found, start config server
+			std::printf("[auto] No config.json found. Starting configuration server...\n");
+			std::printf("[auto] Please link this computer from the host dashboard.\n");
+			isConfig = true;
+			selected = 1;
+		}
+	}
+	
+	if(selected!=1){ 
+		std::puts("Pick exactly one mode: --server OR --client OR --agent OR --config\nUse -h for help."); 
+		Gdiplus::GdiplusShutdown(gdipToken); 
+		return 0; 
+	}
 
 	// forward declare run_agent with reconnect
 	auto run_agent = [&](const std::string &h,uint16_t p)->int{
@@ -292,7 +565,7 @@ int main(int argc,char **argv){
 		}
 		Tcp::done(); return 0; };
 
-	int rc = isServer? run_server(port) : (isClient? run_client(host,port,demo) : run_agent(host,port));
+	int rc = isServer? run_server(port) : (isClient? run_client(host,port,demo) : (isConfig? run_config_server(configPort) : run_agent(host,port)));
 	Gdiplus::GdiplusShutdown(gdipToken);
 	return rc;
 }

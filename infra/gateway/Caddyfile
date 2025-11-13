@@ -1,0 +1,59 @@
+{
+  # Optional: email for ACME / Let's Encrypt notifications
+  email admin@example.com
+}
+
+# nip.io domain with hyphenated IP + custom port 8444. Attempting HTTPS locally will NOT get a public cert for private IP.
+# For real Google OAuth in production, use a public domain or ngrok tunnel that provides trusted TLS.
+https://192-168-29-196.nip.io:8444 {
+  tls internal
+  
+  # Auth service (both /auth and /api/auth paths) - MUST be before catch-all
+  route /auth* {
+    reverse_proxy auth:8081
+  }
+  route /api/auth* {
+    reverse_proxy auth:8081
+  }
+  
+  # API routes for hosts management (served by auth service)
+  route /api/hosts* {
+    reverse_proxy auth:8081
+  }
+  route /api/host* {
+    reverse_proxy auth:8081
+  }
+  route /hosts* {
+    reverse_proxy auth:8081
+  }
+
+  # Session service
+  route /api/session* {
+    reverse_proxy session:8082
+  }
+
+  # Signaling (HTTP + WS) – forward both REST and WebSocket upgrades
+  route /ws* {
+    reverse_proxy signaling:8080 {
+      header_up X-Forwarded-Proto {scheme}
+      header_up X-Forwarded-Host {host}
+    }
+  }
+  route /health* {
+    reverse_proxy signaling:8080
+  }
+  route /session* {
+    reverse_proxy signaling:8080 {
+      header_up X-Forwarded-Proto {scheme}
+      header_up X-Forwarded-Host {host}
+    }
+  }
+
+  # Web static portal - CATCH-ALL, must be LAST
+  reverse_proxy web-portal:80 {
+    header_up Host {host}
+    header_up X-Real-IP {remote}
+    header_up X-Forwarded-For {remote}
+    header_up X-Forwarded-Proto {scheme}
+  }
+}

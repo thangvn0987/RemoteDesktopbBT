@@ -48,7 +48,7 @@
       const token = localStorage.getItem("auth_token");
       // Fire and forget logout API
       if (token) {
-        fetch("http://localhost:8081/auth/logout", {
+        fetch(`${APP_CONFIG.AUTH_BASE}/auth/logout`, {
           method: "POST",
           headers: { Authorization: `Bearer ${token}` },
         }).catch(() => {});
@@ -90,7 +90,7 @@
 
     try {
       const token = localStorage.getItem("auth_token");
-      const response = await fetch("http://localhost:8081/api/hosts", {
+      const response = await fetch(`${APP_CONFIG.AUTH_BASE}/api/hosts`, {
         method: "POST",
         headers: {
           Authorization: `Bearer ${token}`,
@@ -160,7 +160,6 @@
 
   // Host Management Functions
   function handleControlHost(hostId) {
-    // TODO: Implement remote control session
     const hostCard = document
       .querySelector(`[data-host-id="${hostId}"]`)
       .closest(".host-card");
@@ -168,8 +167,12 @@
 
     if (confirm(`Start remote control session with ${hostName}?`)) {
       console.log(`Starting control session with host ${hostId}`);
-      // TODO: Open remote control window/interface
-      alert(`Connecting to ${hostName}... (Feature coming soon!)`);
+
+      // Open auto-ws-controller in new window
+      const controllerUrl = "/tools/auto-ws-controller.html";
+      const windowFeatures =
+        "width=1400,height=900,menubar=no,toolbar=no,location=no,status=yes,scrollbars=yes,resizable=yes";
+      window.open(controllerUrl, `RemoteControl_${hostId}`, windowFeatures);
     }
   }
 
@@ -187,7 +190,7 @@
       try {
         const token = localStorage.getItem("auth_token");
         const response = await fetch(
-          `http://localhost:8081/api/hosts/${relationshipId}`,
+          `${APP_CONFIG.AUTH_BASE}/api/hosts/${relationshipId}`,
           {
             method: "DELETE",
             headers: {
@@ -260,7 +263,7 @@
         throw new Error("No auth token");
       }
 
-      const response = await fetch("http://localhost:8081/api/hosts", {
+      const response = await fetch(`${APP_CONFIG.AUTH_BASE}/api/hosts`, {
         headers: {
           Authorization: `Bearer ${token}`,
           "Content-Type": "application/json",
@@ -317,7 +320,7 @@
       const token = localStorage.getItem("auth_token");
       if (!token) throw new Error("No auth token");
 
-      const res = await fetch("http://localhost:8081/auth/verify", {
+      const res = await fetch(`${APP_CONFIG.AUTH_BASE}/auth/verify`, {
         headers: { Authorization: `Bearer ${token}` },
       });
 

@@ -10,15 +10,40 @@ require("dotenv").config();
 const app = express();
 const PORT = process.env.AUTH_PORT || 8081;
 
+// Enforce HTTPS requirement for Google OAuth in non-localhost scenarios
+const PUBLIC_BASE_URL = process.env.PUBLIC_BASE_URL || "http://localhost:8081";
+const isLocalhost = /^(http:\/\/)?(localhost|127\.0\.0\.1)(:\d+)?$/i.test(
+  PUBLIC_BASE_URL
+);
+if (/^http:/.test(PUBLIC_BASE_URL) && !isLocalhost) {
+  console.warn(
+    "[auth-service] PUBLIC_BASE_URL is using http:// on a non-localhost domain. Google OAuth requires https:// for non-localhost redirect URIs."
+  );
+  console.warn(
+    "[auth-service] Recommendation: use ngrok (ngrok http 80), Cloudflare Tunnel, or a real domain with TLS via Caddy."
+  );
+}
+
 // Database connection
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
 });
 
 // Middleware
+// Allow configuring public origin via env (for gateway + HTTPS)
+const PUBLIC_ORIGIN = process.env.PUBLIC_ORIGIN || "http://localhost:3000";
 app.use(
   cors({
-    origin: ["http://localhost:3000", "http://127.0.0.1:3000"],
+    origin: (origin, cb) => {
+      if (!origin) return cb(null, true);
+      // Accept exact PUBLIC_ORIGIN or same host with https
+      if (
+        origin === PUBLIC_ORIGIN ||
+        origin === PUBLIC_ORIGIN.replace(/^http:/, "https:")
+      )
+        return cb(null, true);
+      return cb(null, false);
+    },
     credentials: true,
     methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
     allowedHeaders: ["Content-Type", "Authorization"],
@@ -47,7 +72,7 @@ if (oauthConfigured) {
         clientSecret: process.env.GOOGLE_CLIENT_SECRET,
         callbackURL:
           process.env.GOOGLE_CALLBACK_URL ||
-          "http://localhost:8081/auth/google/callback",
+          `${PUBLIC_BASE_URL}/auth/google/callback`,
       },
       async (accessToken, refreshToken, profile, done) => {
         try {
@@ -128,35 +153,35 @@ if (oauthConfigured) {
       next();
     },
     passport.authenticate("google", {
-      failureRedirect: "http://localhost:3000/login/login.html",
+      failureRedirect: `${PUBLIC_ORIGIN}/login/login.html`,
       failureFlash: true,
     }),
     async (req, res) => {
-    try {
-      console.log("🔐 Starting session creation for user:", req.user);
+      try {
+        console.log("🔐 Starting session creation for user:", req.user);
 
-      // Create session token
-      const sessionToken = jwt.sign(
-        { userId: req.user.id, email: req.user.email },
-        process.env.AUTH_JWT_SECRET || "dev-secret",
-        { expiresIn: "24h" }
-      );
+        // Create session token
+        const sessionToken = jwt.sign(
+          { userId: req.user.id, email: req.user.email },
+          process.env.AUTH_JWT_SECRET || "dev-secret",
+          { expiresIn: "24h" }
+        );
 
-      console.log("✅ JWT token created successfully");
+        console.log("✅ JWT token created successfully");
 
-      // Save session to database
-      console.log("💾 Saving session to database...");
-      const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000); // 24h
-      await pool.query(
-        "INSERT INTO user_sessions (user_id, session_token, expires_at) VALUES ($1, $2, $3)",
-        [req.user.id, sessionToken, expiresAt]
-      );
+        // Save session to database
+        console.log("💾 Saving session to database...");
+        const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000); // 24h
+        await pool.query(
+          "INSERT INTO user_sessions (user_id, session_token, expires_at) VALUES ($1, $2, $3)",
+          [req.user.id, sessionToken, expiresAt]
+        );
 
-      console.log("✅ Session saved to database successfully");
+        console.log("✅ Session saved to database successfully");
 
-      // For popup flow: return HTML that closes popup and sends token to parent
-      console.log("📤 Sending HTML response with postMessage...");
-      res.send(`
+        // For popup flow: return HTML that closes popup and sends token to parent
+        console.log("📤 Sending HTML response with postMessage...");
+        res.send(`
         <!DOCTYPE html>
         <html>
         <head><title>Authentication Success</title></head>
@@ -176,7 +201,7 @@ if (oauthConfigured) {
                 window.opener.postMessage({ 
                   type: 'AUTH_SUCCESS', 
                   token: '${sessionToken}' 
-                }, 'http://localhost:3000');
+                }, '${PUBLIC_ORIGIN}');
                 console.log('✅ PostMessage sent to localhost:3000');
                 
                 // Method 2: Wildcard origin as fallback
@@ -205,24 +230,23 @@ if (oauthConfigured) {
         </body>
         </html>
       `);
-    } catch (error) {
-      console.error("❌ Session creation error:", error);
-      res.redirect(
-        "http://localhost:3000/login/login.html?error=session_failed"
-      );
+      } catch (error) {
+        console.error("❌ Session creation error:", error);
+        res.redirect(`${PUBLIC_ORIGIN}/login/login.html?error=session_failed`);
+      }
     }
-  }
   );
 } else {
   app.get("/auth/google", (req, res) => {
     res.status(503).json({
       error: "Google OAuth not configured",
-      hint:
-        "Set GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET in infra/docker/.env and restart auth-service.",
+      hint: "Set GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET in infra/docker/.env and restart auth-service.",
     });
   });
   app.get("/auth/google/callback", (req, res) => {
-    res.redirect("http://localhost:3000/login/login.html?error=oauth_not_configured");
+    res.redirect(
+      `${PUBLIC_ORIGIN}/login/login.html?error=oauth_not_configured`
+    );
   });
 }
 
@@ -707,6 +731,76 @@ app.delete(
     }
   }
 );
+
+// ========== HOST TOKEN GENERATION (for linking helper.exe) ==========
+app.post("/api/hosts/generate-token", verifyToken, async (req, res) => {
+  try {
+    const hostUserId = req.user.id;
+
+    // Generate a permanent, secure random token for the helper agent
+    const crypto = require("crypto");
+    const hostToken = "host_" + crypto.randomBytes(32).toString("hex");
+
+    // Store token in database - create table if needed
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS host_tokens (
+        id SERIAL PRIMARY KEY,
+        user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+        host_token VARCHAR(255) UNIQUE NOT NULL,
+        created_at TIMESTAMP DEFAULT NOW(),
+        last_used TIMESTAMP
+      )
+    `);
+
+    // Check if user already has a token
+    const existing = await pool.query(
+      "SELECT host_token FROM host_tokens WHERE user_id = $1",
+      [hostUserId]
+    );
+
+    let finalToken;
+    if (existing.rows.length > 0) {
+      // Return existing token
+      finalToken = existing.rows[0].host_token;
+      console.log(
+        `[generate-token] Returning existing token for user ${hostUserId}`
+      );
+    } else {
+      // Insert new token
+      await pool.query(
+        "INSERT INTO host_tokens (user_id, host_token) VALUES ($1, $2)",
+        [hostUserId, hostToken]
+      );
+      finalToken = hostToken;
+      console.log(`[generate-token] Created new token for user ${hostUserId}`);
+    }
+
+    // Return signaling server details
+    // Helper agent connects from OUTSIDE Docker via TCP to port 5555
+    // Extract IP from PUBLIC_BASE_URL (e.g., https://192-168-29-196.nip.io:8444 -> 192.168.29.196)
+    let signalingHost = "localhost";
+    if (process.env.PUBLIC_BASE_URL) {
+      const hostname = new URL(process.env.PUBLIC_BASE_URL).hostname;
+      // If hostname is in nip.io format (192-168-29-196.nip.io), extract IP
+      if (hostname.includes(".nip.io")) {
+        signalingHost = hostname.replace(".nip.io", "").replace(/-/g, ".");
+      } else {
+        signalingHost = hostname;
+      }
+    }
+    // Helper uses TCP connection, not WebSocket, so return HELPER_PORT (5555)
+    const signalingPort = parseInt(process.env.HELPER_PORT || "5555", 10);
+
+    res.json({
+      hostToken: finalToken,
+      signalingHost,
+      signalingPort,
+    });
+  } catch (error) {
+    console.error("[generate-token] Error:", error);
+    res.status(500).json({ error: "Failed to generate host token" });
+  }
+});
 
 app.listen(PORT, () => {
   console.log(`Auth service running on port ${PORT}`);

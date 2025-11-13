@@ -28,8 +28,7 @@
     .addEventListener("click", function (e) {
       e.preventDefault();
       console.log("Switch to Controller Mode clicked");
-      // TODO: Implement role switching
-      alert("Switch to Controller Mode - Coming Soon!");
+      window.location.href = "/dashboards/controller/controller-dashboard.html";
     });
 
   document.getElementById("settings").addEventListener("click", function (e) {
@@ -46,7 +45,7 @@
     if (confirm("Are you sure you want to logout?")) {
       const token = localStorage.getItem("auth_token");
       if (token) {
-        fetch("http://localhost:8081/auth/logout", {
+        fetch(`${APP_CONFIG.AUTH_BASE}/auth/logout`, {
           method: "POST",
           headers: { Authorization: `Bearer ${token}` },
         }).catch(() => {});
@@ -55,6 +54,89 @@
       window.location.href = "/login/login.html";
     }
   });
+
+  // Host Linking (Luồng 1)
+  document
+    .getElementById("btnLinkHost")
+    .addEventListener("click", async function () {
+      const statusEl = document.getElementById("link-status");
+      const btn = this;
+
+      btn.disabled = true;
+      statusEl.className = "link-status info";
+      statusEl.textContent = "Đang lấy token từ server...";
+
+      try {
+        const token = localStorage.getItem("auth_token");
+        if (!token) {
+          throw new Error("Not authenticated");
+        }
+
+        // 1. Call backend to get host token
+        const resp = await fetch(
+          `${APP_CONFIG.BASE_URL}/api/hosts/generate-token`,
+          {
+            method: "POST",
+            headers: {
+              Authorization: `Bearer ${token}`,
+            },
+            credentials: "include",
+          }
+        );
+
+        if (!resp.ok) {
+          throw new Error(`Server error: ${resp.status}`);
+        }
+
+        const { hostToken, signalingHost, signalingPort } = await resp.json();
+
+        statusEl.className = "link-status info";
+        statusEl.textContent = "Đã nhận token! Đang gửi đến helper agent...";
+
+        // 2. Send token to helper.exe running on localhost:12345
+        const helperResp = await fetch("http://localhost:12345/config", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            server_host: signalingHost,
+            port: signalingPort,
+            token: hostToken,
+          }),
+        });
+
+        if (!helperResp.ok) {
+          throw new Error("Helper agent not responding");
+        }
+
+        statusEl.className = "link-status success";
+        statusEl.textContent =
+          "✅ Liên kết thành công! Helper agent đang khởi động lại...";
+
+        setTimeout(() => {
+          statusEl.textContent =
+            "✅ Máy tính đã được liên kết và sẵn sàng nhận điều khiển";
+        }, 2000);
+      } catch (err) {
+        console.error("Link error:", err);
+        statusEl.className = "link-status error";
+
+        if (
+          err.message.includes("localhost:12345") ||
+          err.message.includes("Helper agent")
+        ) {
+          statusEl.textContent =
+            "❌ Không tìm thấy helper agent. Vui lòng chạy remotebt_helper.exe trước!";
+        } else if (err.message.includes("authenticated")) {
+          statusEl.textContent =
+            "❌ Phiên đăng nhập hết hạn. Vui lòng đăng nhập lại.";
+          setTimeout(() => (window.location.href = "/login/login.html"), 2000);
+        } else {
+          statusEl.textContent = `❌ Lỗi: ${err.message}`;
+        }
+      } finally {
+        btn.disabled = false;
+      }
+    });
 
   // Request Actions
   requestsGrid.addEventListener("click", function (e) {
@@ -95,12 +177,15 @@
         throw new Error("No auth token");
       }
 
-      const response = await fetch("http://localhost:8081/api/host/requests", {
-        headers: {
-          Authorization: `Bearer ${token}`,
-          "Content-Type": "application/json",
-        },
-      });
+      const response = await fetch(
+        `${APP_CONFIG.AUTH_BASE}/api/host/requests`,
+        {
+          headers: {
+            Authorization: `Bearer ${token}`,
+            "Content-Type": "application/json",
+          },
+        }
+      );
 
       if (!response.ok) {
         throw new Error(`HTTP ${response.status}: ${response.statusText}`);
@@ -153,7 +238,7 @@
       }
 
       const response = await fetch(
-        "http://localhost:8081/api/host/controllers",
+        `${APP_CONFIG.AUTH_BASE}/api/host/controllers`,
         {
           headers: {
             Authorization: `Bearer ${token}`,
@@ -302,7 +387,7 @@
     try {
       const token = localStorage.getItem("auth_token");
       const response = await fetch(
-        `http://localhost:8081/api/host/requests/${requestId}/accept`,
+        `${APP_CONFIG.AUTH_BASE}/api/host/requests/${requestId}/accept`,
         {
           method: "POST",
           headers: {
@@ -339,7 +424,7 @@
     try {
       const token = localStorage.getItem("auth_token");
       const response = await fetch(
-        `http://localhost:8081/api/host/requests/${requestId}/reject`,
+        `${APP_CONFIG.AUTH_BASE}/api/host/requests/${requestId}/reject`,
         {
           method: "POST",
           headers: {
@@ -382,7 +467,7 @@
       try {
         const token = localStorage.getItem("auth_token");
         const response = await fetch(
-          `http://localhost:8081/api/host/controllers/${relationshipId}`,
+          `${APP_CONFIG.AUTH_BASE}/api/host/controllers/${relationshipId}`,
           {
             method: "DELETE",
             headers: {
@@ -462,7 +547,7 @@
       const token = localStorage.getItem("auth_token");
       if (!token) throw new Error("No auth token");
 
-      const res = await fetch("http://localhost:8081/auth/verify", {
+      const res = await fetch(`${APP_CONFIG.AUTH_BASE}/auth/verify`, {
         headers: { Authorization: `Bearer ${token}` },
       });
       if (!res.ok) throw new Error(`HTTP ${res.status}`);

@@ -1,0 +1,32 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>Test Page</title>
+    <style>
+      body {
+        background: #0b1020;
+        color: #fff;
+        font-family: system-ui;
+        padding: 40px;
+      }
+      h1 {
+        color: #4285f4;
+      }
+    </style>
+  </head>
+  <body>
+    <h1>Test Page - HTTPS Working</h1>
+    <p>If you can see this styled page, basic serving is OK.</p>
+    <div id="config-test">Testing config.js...</div>
+
+    <script src="./config.js"></script>
+    <script>
+      document.getElementById("config-test").innerHTML =
+        "Config loaded: " +
+        (typeof APP_CONFIG !== "undefined"
+          ? "YES - BASE_URL: " + APP_CONFIG.BASE_URL
+          : "NO");
+    </script>
+  </body>
+</html>

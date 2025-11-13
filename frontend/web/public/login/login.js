@@ -18,11 +18,8 @@
       hasToken: event.data && event.data.token,
     });
 
-    // Accept messages from auth service (8081) or same origin (3000)
-    if (
-      event.origin !== "http://localhost:3000" &&
-      event.origin !== "http://localhost:8081"
-    ) {
+    // Accept messages from same origin (gateway routes all services)
+    if (event.origin !== window.location.origin) {
       console.log("❌ Message rejected - invalid origin:", event.origin);
       return;
     }
@@ -100,7 +97,7 @@
 
     // Professional popup OAuth with role
     const popup = window.open(
-      `http://localhost:8081/auth/google?role=${role}`,
+      `${APP_CONFIG.AUTH_BASE}/auth/google?role=${role}`,
       "google-signin",
       "width=500,height=650,left=" +
         (screen.width / 2 - 250) +
