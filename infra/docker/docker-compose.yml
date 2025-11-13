@@ -21,6 +21,13 @@ services:
       - "5555:5555"
     env_file:
       - ./.env
+    environment:
+      - LOG_LEVEL=info # Set to 'debug' for verbose logs, 'info' for production
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
 
   gateway:
     image: caddy:2-alpine
