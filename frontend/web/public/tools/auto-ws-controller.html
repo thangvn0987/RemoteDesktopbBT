@@ -303,6 +303,7 @@
         <button id="btnSession">Create session & connect</button>
         <span id="status"></span>
         <span id="helper" style="margin-left: 12px"></span>
+        <span id="ping" style="margin-left: 12px; font-weight: 500"></span>
         <button id="btnReconnect" style="margin-left: 12px; display: none">
           Reconnect
         </button>
@@ -319,6 +320,14 @@
         <input id="ival" type="number" value="500" style="width: 80px" /> ms
       </div>
       <div class="row">
+        <label>Quality</label>
+        <input id="quality" type="range" min="10" max="95" value="75" style="width: 200px" />
+        <span id="qualityValue">75</span>
+        <span style="font-size: 12px; color: #666; margin-left: 8px">
+          (10=siêu nhỏ mờ | 50=cân bằng | 95=rõ nét)
+        </span>
+      </div>
+      <div class="row">
         <label>Keyboard</label>
         <button id="kbToggle">Start Keyboard Capture</button>
         <span id="kbStatus" style="margin-left: 8px"></span>
@@ -332,50 +341,9 @@
             border: 1px solid #444;
             border-radius: 6px;
             cursor: crosshair;
+            display: none;
           "
         />
-      </div>
-      <div class="row">
-        <label>Move</label>
-        x <input id="mx" type="number" value="600" /> y
-        <input id="my" type="number" value="400" />
-        <button onclick="send({type:'move', x:+mx.value, y:+my.value})">
-          Send
-        </button>
-      </div>
-      <div class="row">
-        <label>Click</label>
-        <select id="btn">
-          <option>left</option>
-          <option>right</option>
-          <option>middle</option>
-        </select>
-        <button onclick="send({type:'click', button:btn.value})">Send</button>
-      </div>
-      <div class="row">
-        <label>Text</label>
-        <input id="txt" type="text" value="Hello from Auto WS" />
-        <button onclick="send({type:'type', text:txt.value})">Send</button>
-      </div>
-      <div class="row">
-        <label>Key</label>
-        <input id="key" type="text" value="Enter" />
-        <button onclick="send({type:'key', combo:key.value})">Send</button>
-      </div>
-      <div class="row">
-        <label>Scroll</label>
-        delta <input id="delta" type="number" value="120" />
-        <button onclick="send({type:'scroll', delta:+delta.value})">
-          Send
-        </button>
-      </div>
-      <div class="row">
-        <label>Clipboard</label>
-        <textarea id="clipText" rows="3" style="width: 260px"></textarea>
-        <button onclick="send({type:'clipGet'})">Get</button>
-        <button onclick="send({type:'clipSet', text:clipText.value})">
-          Set
-        </button>
       </div>
     </fieldset>
 
@@ -404,6 +372,8 @@
       let kbOn = false;
       const downSet = new Set();
       let cachedRect = null;
+      let pingStart = 0;
+      let pingInterval = null;
       // Invalidate cached rect on window resize and scroll
       window.addEventListener("resize", () => {
         cachedRect = null;
@@ -524,18 +494,29 @@
           ws.onopen = () => {
             setStatus("connected", true);
             log("WS open -> " + wsUrl, "ok");
+            // Start ping interval for latency monitoring
+            pingInterval = setInterval(() => {
+              if (ws && ws.readyState === 1) {
+                pingStart = Date.now();
+                ws.send(JSON.stringify({ type: "ping" }));
+              }
+            }, 2000); // Ping every 2 seconds
           };
           ws.onmessage = (ev) => {
             try {
               const m = JSON.parse(ev.data);
               if (m.type === "frame" && m.data) {
                 const img = document.getElementById("preview");
-                img.src = "data:image/png;base64," + m.data;
+                // Support both JPEG (new helper) and PNG (old helper)
+                const mimeType = m.mime || "image/png"; // Default to PNG for backward compatibility
+                img.src = `data:${mimeType};base64,` + m.data;
                 img.onload = () => {
-                  imgNaturalW = img.naturalWidth;
-                  imgNaturalH = img.naturalHeight;
-                  // Invalidate cached rect when image dimensions change
-                  cachedRect = null;
+                  // Use resolution from message if available (downscaled), otherwise from image natural size
+                  imgNaturalW = m.width || img.naturalWidth;
+                  imgNaturalH = m.height || img.naturalHeight;
+                  cachedRect = null; // Force recalculation on next mouse event
+                  // Show preview when first frame arrives
+                  img.style.display = "block";
                 };
               } else if (m.type === "welcome") {
                 setHelper(!!m.helperReady);
@@ -562,6 +543,18 @@
                 const ta = document.getElementById("clipText");
                 ta.value = m.text || "";
                 log("clip update len=" + (m.text ? m.text.length : 0), "ok");
+              } else if (m.type === "pong") {
+                const latency = Date.now() - pingStart;
+                const pingEl = document.getElementById("ping");
+                pingEl.textContent = `Ping: ${latency}ms`;
+                // Color-code based on latency
+                if (latency < 50) {
+                  pingEl.style.color = "#34d399"; // green
+                } else if (latency < 150) {
+                  pingEl.style.color = "#fbbf24"; // yellow
+                } else {
+                  pingEl.style.color = "#f87171"; // red
+                }
               }
             } catch (_) {
               /* non-JSON */
@@ -573,12 +566,24 @@
             log("WS closed");
             document.getElementById("btnReconnect").style.display =
               "inline-block";
+            // Clear ping interval and reset display
+            if (pingInterval) {
+              clearInterval(pingInterval);
+              pingInterval = null;
+            }
+            document.getElementById("ping").textContent = "";
           };
           ws.onerror = (e) => {
             setStatus("error", false);
             log("WS error", "err");
             document.getElementById("btnReconnect").style.display =
               "inline-block";
+            // Clear ping interval on error
+            if (pingInterval) {
+              clearInterval(pingInterval);
+              pingInterval = null;
+            }
+            document.getElementById("ping").textContent = "";
           };
         } catch (e) {
           setStatus("session failed", false);
@@ -627,10 +632,40 @@
           log("health error: " + e.message, "err");
         }
       };
-      document.getElementById("btnCapOn").onclick = () =>
+
+      // Quality slider
+      const qualitySlider = document.getElementById("quality");
+      const qualityValue = document.getElementById("qualityValue");
+      let isCapturing = false;
+      
+      qualitySlider.oninput = () => {
+        qualityValue.textContent = qualitySlider.value;
+      };
+      
+      qualitySlider.onchange = () => {
+        const q = parseInt(qualitySlider.value);
+        send({ type: "quality", quality: q });
+        log(`Quality set to ${q}`, "ok");
+        
+        // Restart capture để áp dụng quality mới ngay lập tức
+        if (isCapturing) {
+          send({ type: "capture", on: false });
+          setTimeout(() => {
+            send({ type: "capture", on: true, interval: +ival.value || 500 });
+            log("Capture restarted with new quality", "ok");
+          }, 100);
+        }
+      };
+      
+      // Track capture state
+      document.getElementById("btnCapOn").onclick = () => {
+        isCapturing = true;
         send({ type: "capture", on: true, interval: +ival.value || 500 });
-      document.getElementById("btnCapOff").onclick = () =>
+      };
+      document.getElementById("btnCapOff").onclick = () => {
+        isCapturing = false;
         send({ type: "capture", on: false });
+      };
 
       // Keyboard capture
       function keyNameFromEvent(e) {
