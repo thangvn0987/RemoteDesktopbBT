@@ -125,6 +125,19 @@ static std::string base64_encode(const unsigned char* data, size_t len){
 	for(size_t i=0;i<len;i+=3){ unsigned a=data[i]; unsigned b=(i+1<len)?data[i+1]:0; unsigned c=(i+2<len)?data[i+2]:0; out.push_back(B64TAB[(a>>2)&0x3F]); out.push_back(B64TAB[((a&0x3)<<4)|((b>>4)&0xF)]); out.push_back(i+1<len? B64TAB[((b&0xF)<<2)|((c>>6)&0x3)] : '='); out.push_back(i+2<len? B64TAB[c&0x3F] : '='); }
 	return out;
 }
+static std::vector<unsigned char> base64_decode(const std::string &in){
+	static int T[256]; static bool init=false; if(!init){ for(int i=0;i<256;++i) T[i]=-1; for(int i=0;i<64;++i) T[(unsigned char)B64TAB[i]]=i; init=true; }
+	std::vector<unsigned char> out; int val=0, valb=-8; for(unsigned char c: in){ if(T[c]==-1){ if(c=='=') break; else continue; } val=(val<<6)+T[c]; valb+=6; if(valb>=0){ out.push_back((unsigned char)((val>>valb)&0xFF)); valb-=8; } } return out;
+}
+
+// Clipboard helpers (Unicode text only)
+static bool set_clipboard_text_utf8(const std::string &txt){
+	if(!OpenClipboard(nullptr)) return false; if(!EmptyClipboard()){ CloseClipboard(); return false; }
+	std::wstring w = utf8_to_wide(txt); size_t bytes = (w.size()+1)*sizeof(wchar_t);
+	HGLOBAL hMem = GlobalAlloc(GMEM_MOVEABLE, bytes); if(!hMem){ CloseClipboard(); return false; }
+	wchar_t* ptr = (wchar_t*)GlobalLock(hMem); memcpy(ptr, w.c_str(), bytes); GlobalUnlock(hMem);
+	SetClipboardData(CF_UNICODETEXT, hMem); CloseClipboard(); return true; }
+static std::string get_clipboard_text_utf8(){ std::string out; if(!OpenClipboard(nullptr)) return out; HANDLE h = GetClipboardData(CF_UNICODETEXT); if(h){ wchar_t* w = (wchar_t*)GlobalLock(h); if(w){ size_t len=wcslen(w); int need = WideCharToMultiByte(CP_UTF8,0,w,(int)len,nullptr,0,nullptr,nullptr); out.resize(need); if(need>0) WideCharToMultiByte(CP_UTF8,0,w,(int)len,&out[0],need,nullptr,nullptr); GlobalUnlock(h);} } CloseClipboard(); return out; }
 
 // Bring window under last pointer to the foreground to ensure it receives keystrokes
 static void focus_window_under_last_pointer(){
@@ -234,6 +247,10 @@ static bool handle_command(const std::string &line, bool &authed){ auto parts=sp
 			return true;
 		}
 	if(cmd=="capture"){ if(parts.size()>=2){ std::string onoff=parts[1]; for(char &c:onoff)c=(char)tolower(c); if(onoff=="on"){ if(parts.size()>=3) g_capture_interval_ms = std::max(100, std::stoi(parts[2])); if(!g_capture){ g_capture=true; g_capture_thread=std::thread(capture_loop);} std::cout<<"OK\n"; return true; } else if(onoff=="off"){ if(g_capture){ g_capture=false; if(g_capture_thread.joinable()) g_capture_thread.join(); } std::cout<<"OK\n"; return true; } } std::cout<<"ERR usage CAPTURE ON [interval_ms]|OFF\n"; return true; }
+	// Clipboard set: CLIPSET <base64>
+	if(cmd=="clipset" && parts.size()>=2){ std::string b64 = parts[1]; auto bytes = base64_decode(b64); std::string utf8(bytes.begin(), bytes.end()); bool ok = set_clipboard_text_utf8(utf8); std::cout<<(ok?"OK clipset\n":"ERR clipset\n"); return true; }
+	// Clipboard get: CLIPGET -> outputs CLIP <base64>
+	if(cmd=="clipget"){ std::string utf8 = get_clipboard_text_utf8(); std::string b64 = base64_encode((const unsigned char*)utf8.data(), utf8.size()); std::cout<<"CLIP "<<b64<<"\n"; return true; }
 	if(cmd=="quit") return false;
 	std::cout<<"ERR unknown\n"; return true; }
 

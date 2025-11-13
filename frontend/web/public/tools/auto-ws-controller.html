@@ -126,6 +126,12 @@
           Send
         </button>
       </div>
+      <div class="row">
+        <label>Clipboard</label>
+        <textarea id="clipText" rows="3" style="width:260px"></textarea>
+        <button onclick="send({type:'clipGet'})">Get</button>
+        <button onclick="send({type:'clipSet', text:clipText.value})">Set</button>
+      </div>
     </fieldset>
 
     <fieldset>
@@ -262,6 +268,10 @@
                     m.originY,
                   "ok"
                 );
+              } else if (m.type === "clip") {
+                const ta = document.getElementById('clipText');
+                ta.value = m.text || '';
+                log('clip update len='+ (m.text? m.text.length:0), 'ok');
               }
             } catch (_) {
               /* non-JSON */
@@ -403,6 +413,13 @@
           const { x, y } = scaledXY(e);
           send({ type: "move", x, y });
           send({ type: "click", button: e.shiftKey ? "right" : "left" });
+        });
+        // Right mouse button (context menu) wasn't logged before; capture explicitly
+        img.addEventListener("contextmenu", (e) => {
+          e.preventDefault();
+          const { x, y } = scaledXY(e);
+          send({ type: "move", x, y });
+          send({ type: "click", button: "right" });
         });
         img.addEventListener(
           "wheel",

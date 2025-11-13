@@ -66,6 +66,7 @@ const helperServer = net.createServer((socket) => {
 
   let bufAcc = Buffer.alloc(0);
   let frameExpect = -1; // expecting N bytes of base64
+  // Clipboard line buffer (simple lines 'CLIP <base64>') handled like GEOM
 
   socket.on("data", (chunk) => {
     bufAcc = Buffer.concat([bufAcc, chunk]);
@@ -166,6 +167,14 @@ const helperServer = net.createServer((socket) => {
               client.send(msg);
             } catch (_) {}
           }
+        }
+      } else if (line.startsWith("CLIP ")) {
+        const b64 = line.substring(5).trim();
+        let text = "";
+        try { text = Buffer.from(b64, "base64").toString("utf8"); } catch(_) {}
+        const msg = JSON.stringify({ type: "clip", text, base64: b64 });
+        for (const client of wss.clients) {
+          try { client.send(msg); } catch(_){}
         }
       } else {
         // ignore other lines
@@ -314,6 +323,12 @@ wss.on("connection", (ws, req) => {
       else toHelper("CAPTURE OFF");
     } else if (msg.type === "ping") {
       ws.send(JSON.stringify({ type: "pong" }));
+    } else if (msg.type === "clipGet") {
+      toHelper("CLIPGET");
+    } else if (msg.type === "clipSet") {
+      const text = msg.text || "";
+      const b64 = Buffer.from(text, "utf8").toString("base64");
+      toHelper(`CLIPSET ${b64}`);
     }
   });
 });
