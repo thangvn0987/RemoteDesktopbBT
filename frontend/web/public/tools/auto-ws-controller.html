@@ -160,6 +160,14 @@
       let lastWsUrl = "";
       let kbOn = false;
       const downSet = new Set();
+      let cachedRect = null;
+      // Invalidate cached rect on window resize and scroll
+      window.addEventListener("resize", () => {
+        cachedRect = null;
+      });
+      window.addEventListener("scroll", () => {
+        cachedRect = null;
+      }, true); // Use capture phase to catch all scroll events
       let logCount = 0;
 
       // Auto-detect host and port from APP_CONFIG if available
@@ -222,7 +230,10 @@
       }
       function scaledXY(evt) {
         const img = document.getElementById("preview");
-        const r = img.getBoundingClientRect();
+        if (!cachedRect) {
+          cachedRect = img.getBoundingClientRect();
+        }
+        const r = cachedRect;
         const x = Math.max(0, Math.min(evt.clientX - r.left, r.width));
         const y = Math.max(0, Math.min(evt.clientY - r.top, r.height));
         const sx = Math.round(x * (imgNaturalW / r.width)) + originX;
@@ -276,6 +287,8 @@
                 img.onload = () => {
                   imgNaturalW = img.naturalWidth;
                   imgNaturalH = img.naturalHeight;
+                  // Invalidate cached rect when image dimensions change
+                  cachedRect = null;
                 };
               } else if (m.type === "welcome") {
                 setHelper(!!m.helperReady);
@@ -444,7 +457,7 @@
         const img = document.getElementById("preview");
         img.addEventListener("mousemove", (e) => {
           const now = performance.now();
-          if (now - lastMoveTs < 25) return;
+          if (now - lastMoveTs < 33) return; // 30fps throttle
           lastMoveTs = now;
           const { x, y } = scaledXY(e);
           send({ type: "move", x, y });
