@@ -94,7 +94,7 @@ const helperServer = net.createServer((socket) => {
             width: frameWidth,
             height: frameHeight,
           });
-          const msgSize = Buffer.byteLength(msg, 'utf8');
+          const msgSize = Buffer.byteLength(msg, "utf8");
           // Only warn for extremely large frames (>1MB) to reduce log spam
           if (msgSize > 1000000) {
             console.warn(`[perf] large frame: ${Math.round(msgSize / 1024)}KB`);
