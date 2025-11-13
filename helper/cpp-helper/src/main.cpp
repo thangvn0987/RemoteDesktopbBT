@@ -240,23 +240,24 @@ static bool handle_command(const std::string &line, bool &authed){ auto parts=sp
 		int x = std::stoi(parts[1]); int y = std::stoi(parts[2]);
 		g_lastX.store(x); g_lastY.store(y);
 		mouse_move_virtual(x, y);
-		std::cout<<"OK\n"; return true; }
-	if(cmd=="click" && parts.size()>=2){ mouse_click(parts[1]); std::cout<<"OK\n"; return true; }
-	if(cmd=="down" && parts.size()>=2){ mouse_btn(parts[1],true); std::cout<<"OK\n"; return true; }
-	if(cmd=="up" && parts.size()>=2){ mouse_btn(parts[1],false); std::cout<<"OK\n"; return true; }
-	if(cmd=="scroll" && parts.size()>=2){ mouse_scroll(std::stoi(parts[1])); std::cout<<"OK\n"; return true; }
+		// Removed OK log to reduce I/O spam (30-60 calls/sec)
+		return true; }
+	if(cmd=="click" && parts.size()>=2){ mouse_click(parts[1]); return true; }
+	if(cmd=="down" && parts.size()>=2){ mouse_btn(parts[1],true); return true; }
+	if(cmd=="up" && parts.size()>=2){ mouse_btn(parts[1],false); return true; }
+	if(cmd=="scroll" && parts.size()>=2){ mouse_scroll(std::stoi(parts[1])); return true; }
 	if(cmd=="type" && parts.size()>=2){
 		// Ensure target window focused by synthetic click at current cursor location
 		POINT pt; if(GetCursorPos(&pt)){ mouse_click("left"); }
 		auto text=line.substr(line.find(' ')+1);
 		type_text(text);
-		std::cout<<"OK type len="<<text.size()<<"\n";
+		// Removed verbose log
 		return true;
 	}
 		if(cmd=="key" && parts.size()>=2){
 		POINT pt; if(GetCursorPos(&pt)){ mouse_click("left"); }
 		send_combo(parts[1]);
-		std::cout<<"OK key "<<parts[1]<<"\n";
+		// Removed verbose log
 		return true;
 	}
 		if(cmd=="keydown" && parts.size()>=2){
@@ -268,18 +269,18 @@ static bool handle_command(const std::string &line, bool &authed){ auto parts=sp
 					focus_window_under_last_pointer();
 				}
 				send_vk_down(vk);
-				std::cout<<"OK keydown "<<parts[1]<<"\n";
+				// Removed verbose log
 			} else { std::cout<<"ERR keydown\n"; }
 			return true;
 		}
 		if(cmd=="keyup" && parts.size()>=2){
 			WORD vk = vk_from_name(parts[1]);
-			if(vk){ send_vk_up(vk); std::cout<<"OK keyup "<<parts[1]<<"\n"; } else { std::cout<<"ERR keyup\n"; }
+			if(vk){ send_vk_up(vk); /* Removed verbose log */ } else { std::cout<<"ERR keyup\n"; }
 			return true;
 		}
-	if(cmd=="capture"){ if(parts.size()>=2){ std::string onoff=parts[1]; for(char &c:onoff)c=(char)tolower(c); if(onoff=="on"){ if(parts.size()>=3) g_capture_interval_ms = std::max(100, std::stoi(parts[2])); if(!g_capture){ g_capture=true; g_capture_thread=std::thread(capture_loop);} std::cout<<"OK\n"; return true; } else if(onoff=="off"){ if(g_capture){ g_capture=false; if(g_capture_thread.joinable()) g_capture_thread.join(); } std::cout<<"OK\n"; return true; } } std::cout<<"ERR usage CAPTURE ON [interval_ms]|OFF\n"; return true; }
+	if(cmd=="capture"){ if(parts.size()>=2){ std::string onoff=parts[1]; for(char &c:onoff)c=(char)tolower(c); if(onoff=="on"){ if(parts.size()>=3) g_capture_interval_ms = std::max(100, std::stoi(parts[2])); if(!g_capture){ g_capture=true; g_capture_thread=std::thread(capture_loop);} return true; } else if(onoff=="off"){ if(g_capture){ g_capture=false; if(g_capture_thread.joinable()) g_capture_thread.join(); } return true; } } std::cout<<"ERR usage CAPTURE ON [interval_ms]|OFF\n"; return true; }
 	// Quality command: QUALITY 50-90 (JPEG quality, lower=smaller file, higher=better quality)
-	if(cmd=="quality" && parts.size()>=2){ int q = std::stoi(parts[1]); g_jpeg_quality = std::max(1, std::min(100, q)); std::cout<<"OK quality="<<g_jpeg_quality<<"\n"; return true; }
+	if(cmd=="quality" && parts.size()>=2){ int q = std::stoi(parts[1]); g_jpeg_quality = std::max(1, std::min(100, q)); /* Removed verbose log */ return true; }
 	// Clipboard set: CLIPSET <base64>
 	if(cmd=="clipset" && parts.size()>=2){ std::string b64 = parts[1]; auto bytes = base64_decode(b64); std::string utf8(bytes.begin(), bytes.end()); bool ok = set_clipboard_text_utf8(utf8); std::cout<<(ok?"OK clipset\n":"ERR clipset\n"); return true; }
 	// Clipboard get: CLIPGET -> outputs CLIP <base64>

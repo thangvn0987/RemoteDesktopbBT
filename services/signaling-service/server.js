@@ -27,6 +27,8 @@ const HELPER_PORT = process.env.HELPER_PORT
   : 5555;
 const HELPER_TOKEN = process.env.HELPER_TOKEN || "dev-secret";
 const COMPAT_SERVER_AUTH = process.env.HELPER_COMPAT_SERVER_AUTH !== "0"; // default on for compatibility
+const LOG_LEVEL = process.env.LOG_LEVEL || "info"; // debug, info, warn, error
+const DEBUG = LOG_LEVEL === "debug";
 
 // Maintain one TCP connection to helper (inbound from helper/agent)
 let helperSocket = null;
@@ -92,8 +94,9 @@ const helperServer = net.createServer((socket) => {
             width: frameWidth,
             height: frameHeight,
           });
-          const msgSize = Buffer.byteLength(msg, "utf8");
-          if (msgSize > 100000) {
+          const msgSize = Buffer.byteLength(msg, 'utf8');
+          // Only warn for extremely large frames (>1MB) to reduce log spam
+          if (msgSize > 1000000) {
             console.warn(`[perf] large frame: ${Math.round(msgSize / 1024)}KB`);
           }
           for (const client of activeConnections) {
@@ -385,26 +388,34 @@ wss.on("connection", (ws, req) => {
     } else if (msg.type === "click") {
       toHelper(`CLICK ${msg.button || "left"}`);
     } else if (msg.type === "type") {
-      try {
-        console.log("[ws] type", msg.text);
-      } catch (_) {}
+      if (DEBUG) {
+        try {
+          console.log("[ws] type", msg.text);
+        } catch (_) {}
+      }
       toHelper(`TYPE ${msg.text || ""}`);
     } else if (msg.type === "key") {
-      try {
-        console.log("[ws] key", msg.combo || msg.key);
-      } catch (_) {}
+      if (DEBUG) {
+        try {
+          console.log("[ws] key", msg.combo || msg.key);
+        } catch (_) {}
+      }
       toHelper(`KEY ${msg.combo || msg.key || "Enter"}`);
     } else if (msg.type === "keyDown") {
       const k = msg.key || "";
-      try {
-        console.log("[ws] keyDown", k);
-      } catch (_) {}
+      if (DEBUG) {
+        try {
+          console.log("[ws] keyDown", k);
+        } catch (_) {}
+      }
       toHelper(`KEYDOWN ${k}`);
     } else if (msg.type === "keyUp") {
       const k = msg.key || "";
-      try {
-        console.log("[ws] keyUp", k);
-      } catch (_) {}
+      if (DEBUG) {
+        try {
+          console.log("[ws] keyUp", k);
+        } catch (_) {}
+      }
       toHelper(`KEYUP ${k}`);
     } else if (msg.type === "scroll") {
       toHelper(`SCROLL ${msg.delta || 120}`);
@@ -423,7 +434,7 @@ wss.on("connection", (ws, req) => {
         Math.min(100, parseInt(msg.quality || "75", 10))
       );
       toHelper(`QUALITY ${quality}`);
-      console.log("[ws] quality set to", quality);
+      if (DEBUG) console.log("[ws] quality set to", quality);
     } else if (msg.type === "ping") {
       // Immediate pong response with high priority
       try {

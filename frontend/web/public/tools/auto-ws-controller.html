@@ -447,7 +447,7 @@
       function send(obj) {
         if (ws && ws.readyState === 1) {
           ws.send(JSON.stringify(obj));
-          log(">> " + JSON.stringify(obj));
+          // Removed verbose log: log(">> " + JSON.stringify(obj));
         } else {
           log("WS not connected", "err");
         }
@@ -566,7 +566,7 @@
             } catch (_) {
               /* non-JSON */
             }
-            log("<< " + (typeof ev.data === "string" ? ev.data : "[binary]"));
+            // Removed verbose log: log("<< " + (typeof ev.data === "string" ? ev.data : "[binary]"));
           };
           ws.onclose = () => {
             setStatus("closed", false);
