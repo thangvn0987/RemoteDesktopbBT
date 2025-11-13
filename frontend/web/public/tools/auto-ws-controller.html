@@ -215,10 +215,17 @@
 
       async function createSession() {
         const host =
-          document.getElementById("sigHost").value.trim() || window.location.hostname;
-        const port = document.getElementById("sigPort").value.trim() || window.location.port || (window.location.protocol === 'https:' ? '443' : '80');
-        const protocol = window.location.protocol === 'https:' ? 'https:' : 'http:';
-        const url = `${protocol}//${host}${port && port !== '80' && port !== '443' ? ':' + port : ''}/session`;
+          document.getElementById("sigHost").value.trim() ||
+          window.location.hostname;
+        const port =
+          document.getElementById("sigPort").value.trim() ||
+          window.location.port ||
+          (window.location.protocol === "https:" ? "443" : "80");
+        const protocol =
+          window.location.protocol === "https:" ? "https:" : "http:";
+        const url = `${protocol}//${host}${
+          port && port !== "80" && port !== "443" ? ":" + port : ""
+        }/session`;
         try {
           const r = await fetch(url, {
             method: "POST",
@@ -319,11 +326,20 @@
       };
       document.getElementById("btnHealth").onclick = async () => {
         const host =
-          document.getElementById("sigHost").value.trim() || window.location.hostname;
-        const port = document.getElementById("sigPort").value.trim() || window.location.port || (window.location.protocol === 'https:' ? '443' : '80');
-        const protocol = window.location.protocol === 'https:' ? 'https:' : 'http:';
+          document.getElementById("sigHost").value.trim() ||
+          window.location.hostname;
+        const port =
+          document.getElementById("sigPort").value.trim() ||
+          window.location.port ||
+          (window.location.protocol === "https:" ? "443" : "80");
+        const protocol =
+          window.location.protocol === "https:" ? "https:" : "http:";
         try {
-          const r = await fetch(`${protocol}//${host}${port && port !== '80' && port !== '443' ? ':' + port : ''}/health`);
+          const r = await fetch(
+            `${protocol}//${host}${
+              port && port !== "80" && port !== "443" ? ":" + port : ""
+            }/health`
+          );
           const j = await r.json();
           log("health: " + JSON.stringify(j), "ok");
           setHelper(j.helperReady);

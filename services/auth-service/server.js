@@ -11,11 +11,17 @@ const app = express();
 const PORT = process.env.AUTH_PORT || 8081;
 
 // Enforce HTTPS requirement for Google OAuth in non-localhost scenarios
-const PUBLIC_BASE_URL = process.env.PUBLIC_BASE_URL || 'http://localhost:8081';
-const isLocalhost = /^(http:\/\/)?(localhost|127\.0\.0\.1)(:\d+)?$/i.test(PUBLIC_BASE_URL);
+const PUBLIC_BASE_URL = process.env.PUBLIC_BASE_URL || "http://localhost:8081";
+const isLocalhost = /^(http:\/\/)?(localhost|127\.0\.0\.1)(:\d+)?$/i.test(
+  PUBLIC_BASE_URL
+);
 if (/^http:/.test(PUBLIC_BASE_URL) && !isLocalhost) {
-  console.warn('[auth-service] PUBLIC_BASE_URL is using http:// on a non-localhost domain. Google OAuth requires https:// for non-localhost redirect URIs.');
-  console.warn('[auth-service] Recommendation: use ngrok (ngrok http 80), Cloudflare Tunnel, or a real domain with TLS via Caddy.');
+  console.warn(
+    "[auth-service] PUBLIC_BASE_URL is using http:// on a non-localhost domain. Google OAuth requires https:// for non-localhost redirect URIs."
+  );
+  console.warn(
+    "[auth-service] Recommendation: use ngrok (ngrok http 80), Cloudflare Tunnel, or a real domain with TLS via Caddy."
+  );
 }
 
 // Database connection
@@ -31,7 +37,11 @@ app.use(
     origin: (origin, cb) => {
       if (!origin) return cb(null, true);
       // Accept exact PUBLIC_ORIGIN or same host with https
-      if (origin === PUBLIC_ORIGIN || origin === PUBLIC_ORIGIN.replace(/^http:/, 'https:')) return cb(null, true);
+      if (
+        origin === PUBLIC_ORIGIN ||
+        origin === PUBLIC_ORIGIN.replace(/^http:/, "https:")
+      )
+        return cb(null, true);
       return cb(null, false);
     },
     credentials: true,
@@ -147,31 +157,31 @@ if (oauthConfigured) {
       failureFlash: true,
     }),
     async (req, res) => {
-    try {
-      console.log("🔐 Starting session creation for user:", req.user);
+      try {
+        console.log("🔐 Starting session creation for user:", req.user);
 
-      // Create session token
-      const sessionToken = jwt.sign(
-        { userId: req.user.id, email: req.user.email },
-        process.env.AUTH_JWT_SECRET || "dev-secret",
-        { expiresIn: "24h" }
-      );
+        // Create session token
+        const sessionToken = jwt.sign(
+          { userId: req.user.id, email: req.user.email },
+          process.env.AUTH_JWT_SECRET || "dev-secret",
+          { expiresIn: "24h" }
+        );
 
-      console.log("✅ JWT token created successfully");
+        console.log("✅ JWT token created successfully");
 
-      // Save session to database
-      console.log("💾 Saving session to database...");
-      const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000); // 24h
-      await pool.query(
-        "INSERT INTO user_sessions (user_id, session_token, expires_at) VALUES ($1, $2, $3)",
-        [req.user.id, sessionToken, expiresAt]
-      );
+        // Save session to database
+        console.log("💾 Saving session to database...");
+        const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000); // 24h
+        await pool.query(
+          "INSERT INTO user_sessions (user_id, session_token, expires_at) VALUES ($1, $2, $3)",
+          [req.user.id, sessionToken, expiresAt]
+        );
 
-      console.log("✅ Session saved to database successfully");
+        console.log("✅ Session saved to database successfully");
 
-      // For popup flow: return HTML that closes popup and sends token to parent
-      console.log("📤 Sending HTML response with postMessage...");
-      res.send(`
+        // For popup flow: return HTML that closes popup and sends token to parent
+        console.log("📤 Sending HTML response with postMessage...");
+        res.send(`
         <!DOCTYPE html>
         <html>
         <head><title>Authentication Success</title></head>
@@ -220,24 +230,23 @@ if (oauthConfigured) {
         </body>
         </html>
       `);
-    } catch (error) {
-      console.error("❌ Session creation error:", error);
-      res.redirect(
-        `${PUBLIC_ORIGIN}/login/login.html?error=session_failed`
-      );
+      } catch (error) {
+        console.error("❌ Session creation error:", error);
+        res.redirect(`${PUBLIC_ORIGIN}/login/login.html?error=session_failed`);
+      }
     }
-  }
   );
 } else {
   app.get("/auth/google", (req, res) => {
     res.status(503).json({
       error: "Google OAuth not configured",
-      hint:
-        "Set GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET in infra/docker/.env and restart auth-service.",
+      hint: "Set GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET in infra/docker/.env and restart auth-service.",
     });
   });
   app.get("/auth/google/callback", (req, res) => {
-    res.redirect(`${PUBLIC_ORIGIN}/login/login.html?error=oauth_not_configured`);
+    res.redirect(
+      `${PUBLIC_ORIGIN}/login/login.html?error=oauth_not_configured`
+    );
   });
 }
 

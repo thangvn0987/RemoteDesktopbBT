@@ -95,12 +95,15 @@
         throw new Error("No auth token");
       }
 
-      const response = await fetch(`${APP_CONFIG.AUTH_BASE}/api/host/requests`, {
-        headers: {
-          Authorization: `Bearer ${token}`,
-          "Content-Type": "application/json",
-        },
-      });
+      const response = await fetch(
+        `${APP_CONFIG.AUTH_BASE}/api/host/requests`,
+        {
+          headers: {
+            Authorization: `Bearer ${token}`,
+            "Content-Type": "application/json",
+          },
+        }
+      );
 
       if (!response.ok) {
         throw new Error(`HTTP ${response.status}: ${response.statusText}`);
