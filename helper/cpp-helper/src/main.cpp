@@ -114,6 +114,7 @@ static std::string TOKEN="dev-secret";
 // capture globals
 static std::atomic<bool> g_capture{false};
 static int g_capture_interval_ms = 1000;
+static int g_jpeg_quality = 75; // JPEG quality 1-100 (75=good balance, 50=smaller, 90=higher quality)
 static std::thread g_capture_thread;
 static std::mutex g_send_mx;
 static SOCKET g_client_sock = INVALID_SOCKET;
@@ -151,14 +152,15 @@ static void focus_window_under_last_pointer(){
 	sleep_ms(10);
 }
 
-// capture screen to PNG (GDI+)
-static bool get_png_bytes(std::vector<unsigned char>& out){
+// capture screen to JPEG (GDI+) - no resolution scaling to avoid coordinate mismatch
+static bool get_jpeg_bytes(std::vector<unsigned char>& out, int &outW, int &outH, ULONG quality = 75){
 	// Use full virtual screen to avoid coordinate mismatch across monitors and DPI
 	g_vx = GetSystemMetrics(SM_XVIRTUALSCREEN);
 	g_vy = GetSystemMetrics(SM_YVIRTUALSCREEN);
 	g_vw = GetSystemMetrics(SM_CXVIRTUALSCREEN);
 	g_vh = GetSystemMetrics(SM_CYVIRTUALSCREEN);
 	int w = g_vw; int h = g_vh;
+	
 	HDC hScreen = GetDC(nullptr); if(!hScreen) return false;
 	HDC hMem = CreateCompatibleDC(hScreen); if(!hMem){ ReleaseDC(nullptr,hScreen); return false; }
 	BITMAPINFO bmi{}; bmi.bmiHeader.biSize=sizeof(BITMAPINFOHEADER); bmi.bmiHeader.biWidth=w; bmi.bmiHeader.biHeight=-h; bmi.bmiHeader.biPlanes=1; bmi.bmiHeader.biBitCount=32; bmi.bmiHeader.biCompression=BI_RGB;
@@ -167,14 +169,28 @@ static bool get_png_bytes(std::vector<unsigned char>& out){
 	// Copy from virtual desktop origin (can be negative)
 	BitBlt(hMem, 0,0, w,h, hScreen, g_vx, g_vy, SRCCOPY|CAPTUREBLT);
 	SelectObject(hMem, old);
-	// GDI+ save to PNG memory stream
-	Gdiplus::Bitmap bmp(hBmp, nullptr);
-	CLSID clsidPng; UINT num=0, size=0; Gdiplus::GetImageEncodersSize(&num,&size);
+	
+	// Create GDI+ bitmap from capture (keep full resolution, no downscaling)
+	Gdiplus::Bitmap bmpFull(hBmp, nullptr);
+	
+	// Keep full resolution for accurate mouse coordinates
+	outW = w;
+	outH = h;
+	Gdiplus::Bitmap* bmp = &bmpFull;
+	
+	CLSID clsidJpeg; UINT num=0, size=0; Gdiplus::GetImageEncodersSize(&num,&size);
 	std::vector<BYTE> enc(size); Gdiplus::ImageCodecInfo* pInfo = reinterpret_cast<Gdiplus::ImageCodecInfo*>(enc.data());
 	Gdiplus::GetImageEncoders(num, size, pInfo);
-	for(UINT i=0;i<num;++i){ if(wcscmp(pInfo[i].MimeType, L"image/png")==0){ clsidPng = pInfo[i].Clsid; break; } }
+	for(UINT i=0;i<num;++i){ if(wcscmp(pInfo[i].MimeType, L"image/jpeg")==0){ clsidJpeg = pInfo[i].Clsid; break; } }
+	// Set JPEG quality (1-100, lower = smaller file size)
+	Gdiplus::EncoderParameters encoderParams;
+	encoderParams.Count = 1;
+	encoderParams.Parameter[0].Guid = Gdiplus::EncoderQuality;
+	encoderParams.Parameter[0].Type = Gdiplus::EncoderParameterValueTypeLong;
+	encoderParams.Parameter[0].NumberOfValues = 1;
+	encoderParams.Parameter[0].Value = &quality;
 	IStream* stream=nullptr; CreateStreamOnHGlobal(nullptr, TRUE, &stream);
-	bmp.Save(stream, &clsidPng, nullptr);
+	bmp->Save(stream, &clsidJpeg, &encoderParams);
 	// extract bytes
 	HGLOBAL hg; GetHGlobalFromStream(stream, &hg); SIZE_T sz = GlobalSize(hg); void* p = GlobalLock(hg);
 	out.assign((unsigned char*)p, (unsigned char*)p + sz);
@@ -183,10 +199,10 @@ static bool get_png_bytes(std::vector<unsigned char>& out){
 	return !out.empty();
 }
 
-static void send_frame_over_tcp(const std::string &b64){
+static void send_frame_over_tcp(const std::string &b64, int w, int h){
 	if(g_client_sock==INVALID_SOCKET) return;
 	std::lock_guard<std::mutex> lk(g_send_mx);
-	std::string header = "FRAME "+std::to_string(b64.size())+"\n";
+	std::string header = "FRAME "+std::to_string(b64.size())+" "+std::to_string(w)+"x"+std::to_string(h)+"\n";
 	send(g_client_sock, header.c_str(), (int)header.size(), 0);
 	send(g_client_sock, b64.c_str(), (int)b64.size(), 0);
 	const char nl='\n'; send(g_client_sock, &nl, 1, 0);
@@ -194,9 +210,11 @@ static void send_frame_over_tcp(const std::string &b64){
 
 static void capture_loop(){
 	while(g_capture){
-		std::vector<unsigned char> png; if(get_png_bytes(png)){
-			std::string b64 = base64_encode(png.data(), png.size());
-			send_frame_over_tcp(b64);
+		int w=0, h=0;
+		std::vector<unsigned char> jpeg; 
+		if(get_jpeg_bytes(jpeg, w, h, g_jpeg_quality)){
+			std::string b64 = base64_encode(jpeg.data(), jpeg.size());
+			send_frame_over_tcp(b64, w, h);
 		}
 		sleep_ms(g_capture_interval_ms);
 	}
@@ -260,6 +278,8 @@ static bool handle_command(const std::string &line, bool &authed){ auto parts=sp
 			return true;
 		}
 	if(cmd=="capture"){ if(parts.size()>=2){ std::string onoff=parts[1]; for(char &c:onoff)c=(char)tolower(c); if(onoff=="on"){ if(parts.size()>=3) g_capture_interval_ms = std::max(100, std::stoi(parts[2])); if(!g_capture){ g_capture=true; g_capture_thread=std::thread(capture_loop);} std::cout<<"OK\n"; return true; } else if(onoff=="off"){ if(g_capture){ g_capture=false; if(g_capture_thread.joinable()) g_capture_thread.join(); } std::cout<<"OK\n"; return true; } } std::cout<<"ERR usage CAPTURE ON [interval_ms]|OFF\n"; return true; }
+	// Quality command: QUALITY 50-90 (JPEG quality, lower=smaller file, higher=better quality)
+	if(cmd=="quality" && parts.size()>=2){ int q = std::stoi(parts[1]); g_jpeg_quality = std::max(1, std::min(100, q)); std::cout<<"OK quality="<<g_jpeg_quality<<"\n"; return true; }
 	// Clipboard set: CLIPSET <base64>
 	if(cmd=="clipset" && parts.size()>=2){ std::string b64 = parts[1]; auto bytes = base64_decode(b64); std::string utf8(bytes.begin(), bytes.end()); bool ok = set_clipboard_text_utf8(utf8); std::cout<<(ok?"OK clipset\n":"ERR clipset\n"); return true; }
 	// Clipboard get: CLIPGET -> outputs CLIP <base64>
