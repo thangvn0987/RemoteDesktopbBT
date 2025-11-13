@@ -167,10 +167,11 @@
 
     if (confirm(`Start remote control session with ${hostName}?`)) {
       console.log(`Starting control session with host ${hostId}`);
-      
+
       // Open auto-ws-controller in new window
-      const controllerUrl = '/tools/auto-ws-controller.html';
-      const windowFeatures = 'width=1400,height=900,menubar=no,toolbar=no,location=no,status=yes,scrollbars=yes,resizable=yes';
+      const controllerUrl = "/tools/auto-ws-controller.html";
+      const windowFeatures =
+        "width=1400,height=900,menubar=no,toolbar=no,location=no,status=yes,scrollbars=yes,resizable=yes";
       window.open(controllerUrl, `RemoteControl_${hostId}`, windowFeatures);
     }
   }

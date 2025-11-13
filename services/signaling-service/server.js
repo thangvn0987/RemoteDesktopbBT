@@ -245,15 +245,15 @@ app.post("/session", (req, res) => {
     req.headers["x-forwarded-host"] ||
     req.headers.host ||
     `localhost:${WS_PORT}`;
-  
+
   // Auto-detect WebSocket protocol based on request
-  const isSecure = 
-    req.secure || 
+  const isSecure =
+    req.secure ||
     req.headers["x-forwarded-proto"] === "https" ||
     req.headers["x-forwarded-ssl"] === "on" ||
     process.env.FORCE_WSS === "1";
   const scheme = isSecure ? "wss" : "ws";
-  
+
   const wsUrl = `${scheme}://${host}/ws/?token=${token}`;
   res.json({ sessionId, token, wsUrl, helperReady });
 });

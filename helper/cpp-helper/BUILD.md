@@ -7,6 +7,7 @@ You need a C++ compiler with Windows SDK support. Choose one:
 ### Option 1: MinGW-w64 (Recommended)
 
 Download and install MinGW-w64:
+
 - **WinLibs**: https://winlibs.com/ (easiest, includes all libraries)
 - **Official MinGW-w64**: https://www.mingw-w64.org/downloads/
 
@@ -26,6 +27,7 @@ cd helper\cpp-helper
 ```
 
 Or manually:
+
 ```powershell
 g++ -std=c++11 src/main.cpp -o build/remotebt_helper.exe -lgdiplus -lws2_32 -lgdi32 -lole32 -luuid -static-libgcc -static-libstdc++
 ```
@@ -51,6 +53,7 @@ Copy-Item build/remotebt_helper.exe ../../frontend/web/public/downloads/remotebt
 ```
 
 Then rebuild the web-portal Docker container:
+
 ```powershell
 cd ../../infra/docker
 docker compose build web-portal
@@ -60,11 +63,13 @@ docker compose up -d web-portal
 ## Testing
 
 Run the built executable:
+
 ```powershell
 .\build\remotebt_helper.exe
 ```
 
 You should see:
+
 ```
 [auto] No config.json found. Starting configuration server...
 [config] HTTP server listening on localhost:12345

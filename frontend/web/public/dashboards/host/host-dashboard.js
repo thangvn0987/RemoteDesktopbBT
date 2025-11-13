@@ -56,76 +56,87 @@
   });
 
   // Host Linking (Luồng 1)
-  document.getElementById("btnLinkHost").addEventListener("click", async function() {
-    const statusEl = document.getElementById("link-status");
-    const btn = this;
-    
-    btn.disabled = true;
-    statusEl.className = "link-status info";
-    statusEl.textContent = "Đang lấy token từ server...";
-    
-    try {
-      const token = localStorage.getItem("auth_token");
-      if (!token) {
-        throw new Error("Not authenticated");
-      }
-      
-      // 1. Call backend to get host token
-      const resp = await fetch(`${APP_CONFIG.BASE_URL}/api/hosts/generate-token`, {
-        method: "POST",
-        headers: {
-          "Authorization": `Bearer ${token}`
-        },
-        credentials: "include"
-      });
-      
-      if (!resp.ok) {
-        throw new Error(`Server error: ${resp.status}`);
-      }
-      
-      const { hostToken, signalingHost, signalingPort } = await resp.json();
-      
+  document
+    .getElementById("btnLinkHost")
+    .addEventListener("click", async function () {
+      const statusEl = document.getElementById("link-status");
+      const btn = this;
+
+      btn.disabled = true;
       statusEl.className = "link-status info";
-      statusEl.textContent = "Đã nhận token! Đang gửi đến helper agent...";
-      
-      // 2. Send token to helper.exe running on localhost:12345
-      const helperResp = await fetch("http://localhost:12345/config", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          server_host: signalingHost,
-          port: signalingPort,
-          token: hostToken
-        })
-      });
-      
-      if (!helperResp.ok) {
-        throw new Error("Helper agent not responding");
+      statusEl.textContent = "Đang lấy token từ server...";
+
+      try {
+        const token = localStorage.getItem("auth_token");
+        if (!token) {
+          throw new Error("Not authenticated");
+        }
+
+        // 1. Call backend to get host token
+        const resp = await fetch(
+          `${APP_CONFIG.BASE_URL}/api/hosts/generate-token`,
+          {
+            method: "POST",
+            headers: {
+              Authorization: `Bearer ${token}`,
+            },
+            credentials: "include",
+          }
+        );
+
+        if (!resp.ok) {
+          throw new Error(`Server error: ${resp.status}`);
+        }
+
+        const { hostToken, signalingHost, signalingPort } = await resp.json();
+
+        statusEl.className = "link-status info";
+        statusEl.textContent = "Đã nhận token! Đang gửi đến helper agent...";
+
+        // 2. Send token to helper.exe running on localhost:12345
+        const helperResp = await fetch("http://localhost:12345/config", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            server_host: signalingHost,
+            port: signalingPort,
+            token: hostToken,
+          }),
+        });
+
+        if (!helperResp.ok) {
+          throw new Error("Helper agent not responding");
+        }
+
+        statusEl.className = "link-status success";
+        statusEl.textContent =
+          "✅ Liên kết thành công! Helper agent đang khởi động lại...";
+
+        setTimeout(() => {
+          statusEl.textContent =
+            "✅ Máy tính đã được liên kết và sẵn sàng nhận điều khiển";
+        }, 2000);
+      } catch (err) {
+        console.error("Link error:", err);
+        statusEl.className = "link-status error";
+
+        if (
+          err.message.includes("localhost:12345") ||
+          err.message.includes("Helper agent")
+        ) {
+          statusEl.textContent =
+            "❌ Không tìm thấy helper agent. Vui lòng chạy remotebt_helper.exe trước!";
+        } else if (err.message.includes("authenticated")) {
+          statusEl.textContent =
+            "❌ Phiên đăng nhập hết hạn. Vui lòng đăng nhập lại.";
+          setTimeout(() => (window.location.href = "/login/login.html"), 2000);
+        } else {
+          statusEl.textContent = `❌ Lỗi: ${err.message}`;
+        }
+      } finally {
+        btn.disabled = false;
       }
-      
-      statusEl.className = "link-status success";
-      statusEl.textContent = "✅ Liên kết thành công! Helper agent đang khởi động lại...";
-      
-      setTimeout(() => {
-        statusEl.textContent = "✅ Máy tính đã được liên kết và sẵn sàng nhận điều khiển";
-      }, 2000);
-      
-    } catch (err) {
-      console.error("Link error:", err);
-      statusEl.className = "link-status error";
-      
-      if (err.message.includes("localhost:12345") || err.message.includes("Helper agent")) {
-        statusEl.textContent = "❌ Không tìm thấy helper agent. Vui lòng chạy remotebt_helper.exe trước!";
-      } else if (err.message.includes("authenticated")) {
-        statusEl.textContent = "❌ Phiên đăng nhập hết hạn. Vui lòng đăng nhập lại.";
-        setTimeout(() => window.location.href = "/login/login.html", 2000);
-      } else {
-        statusEl.textContent = `❌ Lỗi: ${err.message}`;
-      }
-    } finally {
-      btn.disabled = false;
-    }
-  });
+    });
 
   // Request Actions
   requestsGrid.addEventListener("click", function (e) {

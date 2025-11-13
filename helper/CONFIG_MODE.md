@@ -11,12 +11,14 @@ Config mode enables one-click computer linking from the web dashboard. No comman
 When you run `remotebt_helper.exe` without arguments:
 
 1. **First Run (No config.json)**
+
    - Starts HTTP server on `localhost:12345`
    - Displays: `[auto] No config.json found. Starting configuration server...`
    - Displays: `[auto] Please link this computer from the host dashboard.`
    - Waits for configuration from web dashboard
 
 2. **Web Dashboard Action**
+
    - User opens host dashboard at `https://192-168-29-196.nip.io:8444/dashboards/host/host-dashboard.html`
    - Clicks "Link This Computer" button
    - Dashboard calls `/api/hosts/generate-token` to create auth token
@@ -29,6 +31,7 @@ When you run `remotebt_helper.exe` without arguments:
      ```
 
 3. **Helper Agent Response**
+
    - Receives config via HTTP POST
    - Writes `config.json` to disk
    - Sends success response to browser
@@ -44,6 +47,7 @@ When you run `remotebt_helper.exe` without arguments:
 ## Configuration File Format
 
 `config.json`:
+
 ```json
 {
   "server_host": "192-168-29-196.nip.io",
@@ -59,6 +63,7 @@ When you run `remotebt_helper.exe` without arguments:
 ### POST /config
 
 **Request:**
+
 ```http
 POST /config HTTP/1.1
 Host: localhost:12345
@@ -71,6 +76,7 @@ Content-Type: application/json
 ```
 
 **Response (Success):**
+
 ```http
 HTTP/1.1 200 OK
 Content-Type: application/json
@@ -83,6 +89,7 @@ Access-Control-Allow-Origin: *
 ```
 
 **Response (Error):**
+
 ```http
 HTTP/1.1 400 Bad Request
 Content-Type: application/json
@@ -95,6 +102,7 @@ Content-Type: application/json
 ### OPTIONS /config
 
 Handles CORS preflight requests:
+
 ```http
 HTTP/1.1 204 No Content
 Access-Control-Allow-Origin: *
@@ -105,11 +113,13 @@ Access-Control-Allow-Headers: Content-Type
 ## Manual Config Mode
 
 Start config server explicitly:
+
 ```bash
 remotebt_helper.exe --config
 ```
 
 Useful for:
+
 - Testing configuration flow
 - Resetting configuration
 - Troubleshooting connection issues
@@ -117,6 +127,7 @@ Useful for:
 ## Resetting Configuration
 
 To reset to config mode:
+
 1. Delete `config.json`
 2. Restart `remotebt_helper.exe`
 3. Helper enters config mode automatically
@@ -131,19 +142,23 @@ To reset to config mode:
 ## Troubleshooting
 
 ### "Failed to write config.json"
+
 - Check write permissions in helper directory
 - Run as administrator if needed
 
 ### "Failed to restart (err=...)"
+
 - Config was saved successfully
 - Manually restart helper: `remotebt_helper.exe`
 
 ### Config server not responding
+
 - Check if port 12345 is available
 - Verify browser can access `http://localhost:12345`
 - Check firewall settings
 
 ### Agent not connecting after restart
+
 - Verify `config.json` exists and is valid JSON
 - Check server_host is reachable
 - Verify token is correct (check auth service logs)
@@ -153,16 +168,19 @@ To reset to config mode:
 ### C++ Code Structure
 
 **read_config()**: Reads and parses `config.json`
+
 ```cpp
 bool read_config(std::string &server_host, std::string &token)
 ```
 
 **run_config_server()**: HTTP server on localhost:12345
+
 ```cpp
 int run_config_server(uint16_t port)
 ```
 
 **main() auto mode logic**:
+
 ```cpp
 if(selected == 0) {
     std::string config_host, config_token;
@@ -175,6 +193,7 @@ if(selected == 0) {
 ```
 
 **Auto-restart after config**:
+
 ```cpp
 char exePath[MAX_PATH];
 GetModuleFileNameA(NULL, exePath, MAX_PATH);
@@ -185,21 +204,25 @@ CreateProcessA(NULL, (LPSTR)cmdLine.c_str(), ...);
 ### Frontend Integration
 
 `host-dashboard.js`:
+
 ```javascript
 async function linkHostAgent() {
-    // Step 1: Generate token
-    const tokenResp = await fetch(`${APP_CONFIG.BASE_URL}/api/hosts/generate-token`, {
-        method: 'POST',
-        credentials: 'include'
-    });
-    const { token, server_host } = await tokenResp.json();
-    
-    // Step 2: Send to helper agent
-    const configResp = await fetch('http://localhost:12345/config', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ server_host, token })
-    });
+  // Step 1: Generate token
+  const tokenResp = await fetch(
+    `${APP_CONFIG.BASE_URL}/api/hosts/generate-token`,
+    {
+      method: "POST",
+      credentials: "include",
+    }
+  );
+  const { token, server_host } = await tokenResp.json();
+
+  // Step 2: Send to helper agent
+  const configResp = await fetch("http://localhost:12345/config", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ server_host, token }),
+  });
 }
 ```
 
@@ -210,4 +233,3 @@ async function linkHostAgent() {
 - [ ] GUI configuration window (no browser needed)
 - [ ] Encrypted config.json storage
 - [ ] Automatic updates check
-

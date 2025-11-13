@@ -736,11 +736,11 @@ app.delete(
 app.post("/api/hosts/generate-token", verifyToken, async (req, res) => {
   try {
     const hostUserId = req.user.id;
-    
+
     // Generate a permanent, secure random token for the helper agent
-    const crypto = require('crypto');
-    const hostToken = 'host_' + crypto.randomBytes(32).toString('hex');
-    
+    const crypto = require("crypto");
+    const hostToken = "host_" + crypto.randomBytes(32).toString("hex");
+
     // Store token in database - create table if needed
     await pool.query(`
       CREATE TABLE IF NOT EXISTS host_tokens (
@@ -751,48 +751,50 @@ app.post("/api/hosts/generate-token", verifyToken, async (req, res) => {
         last_used TIMESTAMP
       )
     `);
-    
+
     // Check if user already has a token
     const existing = await pool.query(
-      'SELECT host_token FROM host_tokens WHERE user_id = $1',
+      "SELECT host_token FROM host_tokens WHERE user_id = $1",
       [hostUserId]
     );
-    
+
     let finalToken;
     if (existing.rows.length > 0) {
       // Return existing token
       finalToken = existing.rows[0].host_token;
-      console.log(`[generate-token] Returning existing token for user ${hostUserId}`);
+      console.log(
+        `[generate-token] Returning existing token for user ${hostUserId}`
+      );
     } else {
       // Insert new token
       await pool.query(
-        'INSERT INTO host_tokens (user_id, host_token) VALUES ($1, $2)',
+        "INSERT INTO host_tokens (user_id, host_token) VALUES ($1, $2)",
         [hostUserId, hostToken]
       );
       finalToken = hostToken;
       console.log(`[generate-token] Created new token for user ${hostUserId}`);
     }
-    
+
     // Return signaling server details
     // Helper agent connects from OUTSIDE Docker via TCP to port 5555
     // Extract IP from PUBLIC_BASE_URL (e.g., https://192-168-29-196.nip.io:8444 -> 192.168.29.196)
-    let signalingHost = 'localhost';
+    let signalingHost = "localhost";
     if (process.env.PUBLIC_BASE_URL) {
       const hostname = new URL(process.env.PUBLIC_BASE_URL).hostname;
       // If hostname is in nip.io format (192-168-29-196.nip.io), extract IP
-      if (hostname.includes('.nip.io')) {
-        signalingHost = hostname.replace('.nip.io', '').replace(/-/g, '.');
+      if (hostname.includes(".nip.io")) {
+        signalingHost = hostname.replace(".nip.io", "").replace(/-/g, ".");
       } else {
         signalingHost = hostname;
       }
     }
     // Helper uses TCP connection, not WebSocket, so return HELPER_PORT (5555)
-    const signalingPort = parseInt(process.env.HELPER_PORT || '5555', 10);
-    
+    const signalingPort = parseInt(process.env.HELPER_PORT || "5555", 10);
+
     res.json({
       hostToken: finalToken,
       signalingHost,
-      signalingPort
+      signalingPort,
     });
   } catch (error) {
     console.error("[generate-token] Error:", error);
