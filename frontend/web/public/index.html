@@ -1,9 +1,9 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="vi">
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Ephemeral Remote Control - Demo Portal</title>
+    <title>Điều Khiển Từ Xa - Cổng Demo</title>
     <style>
       :root {
         --bg: #0b1020;
@@ -150,8 +150,8 @@
   </head>
   <body>
     <div class="container">
-      <h1>🎮 Remote Desktop Web Portal</h1>
-      <p class="subtitle">Frontend Demo & Development Portal</p>
+      <h1>🎮 Cổng Web Remote Desktop</h1>
+      <p class="subtitle">Khu vực giao diện thử nghiệm & phát triển</p>
 
       <!-- DEBUG TOKEN SECTION -->
       <div
@@ -164,24 +164,24 @@
         "
       >
         <h2 style="color: #60a5fa; margin-bottom: 15px">
-          🔧 DEBUG MODE - Auth Token Status
+          🔧 CHẾ ĐỘ DEBUG - Trạng thái Auth Token
         </h2>
         <div id="token-info">
           <p>
-            <span style="color: #fbbf24">Status:</span>
+            <span style="color: #fbbf24">Trạng thái:</span>
             <span id="token-status" style="color: #ef4444; font-weight: bold"
               >Loading...</span
             >
           </p>
           <p>
-            <span style="color: #fbbf24">Domain:</span>
+            <span style="color: #fbbf24">Tên miền:</span>
             <span id="current-domain" style="color: #10b981">-</span>
           </p>
           <p>
-            <span style="color: #fbbf24">Token Length:</span>
+            <span style="color: #fbbf24">Độ dài Token:</span>
             <span id="token-length" style="color: #10b981">-</span>
           </p>
-          <p><span style="color: #fbbf24">Token Preview:</span></p>
+          <p><span style="color: #fbbf24">Xem trước Token:</span></p>
           <textarea
             id="token-display"
             readonly
@@ -213,7 +213,7 @@
                 font-weight: 500;
               "
             >
-              🔄 Refresh
+              🔄 Làm mới
             </button>
             <button
               id="go-controller"
@@ -227,7 +227,7 @@
                 font-weight: 500;
               "
             >
-              🎮 Controller Dashboard
+              🎮 Bảng điều khiển (Controller)
             </button>
             <button
               id="go-host"
@@ -241,7 +241,7 @@
                 font-weight: 500;
               "
             >
-              🖥️ Host Dashboard
+              🖥️ Bảng máy chủ (Host)
             </button>
             <button
               id="clear-token"
@@ -255,7 +255,7 @@
                 font-weight: 500;
               "
             >
-              🗑️ Clear Token
+              🗑️ Xóa Token
             </button>
           </div>
         </div>
@@ -264,48 +264,46 @@
       <div class="demo-grid">
         <!-- Login Page -->
         <div class="demo-card">
-          <h3>🔐 Login Page</h3>
+          <h3>🔐 Trang Đăng Nhập</h3>
           <p>
-            Authentication page with Google OAuth integration and role selection
-            (Controller/Host).
+            Trang đăng nhập với Google OAuth và chọn vai trò (Controller/Host).
           </p>
-          <a href="/login/login.html" class="demo-btn">View Login Page</a>
+          <a href="/login/login.html" class="demo-btn">Mở Trang Đăng Nhập</a>
         </div>
 
         <!-- Controller Dashboard -->
         <div class="demo-card">
-          <h3>🎮 Controller Dashboard</h3>
+          <h3>🎮 Bảng Điều Khiển Controller</h3>
           <p>
-            Dashboard for users who want to control other computers. Manage
-            hosts, start sessions.
+            Bảng dành cho người muốn điều khiển máy khác. Quản lý máy chủ, tạo
+            phiên.
           </p>
           <a
             href="/dashboards/controller/controller-dashboard.html"
             class="demo-btn"
-            >View Controller Dashboard</a
+            >Mở Bảng Controller</a
           >
         </div>
 
         <!-- Host Dashboard -->
         <div class="demo-card">
-          <h3>🖥️ Host Dashboard</h3>
+          <h3>🖥️ Bảng Host</h3>
           <p>
-            Dashboard for users who allow others to control their computers.
-            Manage requests and controllers.
+            Bảng cho người cho phép người khác điều khiển máy của họ. Quản lý
+            yêu cầu và controller.
           </p>
           <a href="/dashboards/host/host-dashboard.html" class="demo-btn"
-            >View Host Dashboard</a
+            >Mở Bảng Host</a
           >
         </div>
       </div>
 
       <div class="info-section">
-        <h3>🚀 Development Info</h3>
+        <h3>🚀 Thông Tin Phát Triển</h3>
         <p>
-          This is a frontend development portal for the Ephemeral Remote Control
-          project. Each page represents a different user interface component
-          that will be integrated with the backend services for authentication,
-          session management, and remote control functionality.
+          Đây là cổng phát triển giao diện cho dự án Remote Desktop. Mỗi trang
+          đại diện cho một thành phần UI sẽ được tích hợp với backend để xác
+          thực, quản lý phiên và chức năng điều khiển từ xa.
         </p>
       </div>
     </div>
@@ -322,15 +320,15 @@
         domainEl.textContent = window.location.origin;
 
         if (token) {
-          statusEl.textContent = "✅ TOKEN FOUND";
+          statusEl.textContent = "✅ ĐÃ TÌM THẤY TOKEN";
           statusEl.style.color = "#10b981";
-          lengthEl.textContent = token.length + " characters";
+          lengthEl.textContent = token.length + " ký tự";
           displayEl.value = token;
         } else {
-          statusEl.textContent = "❌ NO TOKEN";
+          statusEl.textContent = "❌ KHÔNG CÓ TOKEN";
           statusEl.style.color = "#ef4444";
-          lengthEl.textContent = "0 characters";
-          displayEl.value = "No token found in localStorage";
+          lengthEl.textContent = "0 ký tự";
+          displayEl.value = "Không tìm thấy token trong localStorage";
         }
       }
 
@@ -349,10 +347,10 @@
       });
 
       document.getElementById("clear-token").addEventListener("click", () => {
-        if (confirm("Are you sure you want to clear the auth token?")) {
+        if (confirm("Bạn chắc chắn muốn xóa auth token?")) {
           localStorage.removeItem("auth_token");
           updateTokenInfo();
-          alert("Token cleared successfully!");
+          alert("Đã xóa token thành công!");
         }
       });
 
