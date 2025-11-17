@@ -449,11 +449,13 @@ app.post("/api/hosts", verifyToken, async (req, res) => {
     if (existingResult.rows.length > 0) {
       const existing = existingResult.rows[0];
       // If status is pending or active -> block
-      if (existing.status === 'pending' || existing.status === 'active') {
-        return res.status(400).json({ error: "Invite already pending or active" });
+      if (existing.status === "pending" || existing.status === "active") {
+        return res
+          .status(400)
+          .json({ error: "Invite already pending or active" });
       }
       // If previously rejected -> resurrect by updating to pending
-      if (existing.status === 'rejected') {
+      if (existing.status === "rejected") {
         const resurrectResult = await pool.query(
           "UPDATE host_relationships SET status = 'pending', invitation_message = $1, updated_at = NOW() WHERE relationship_id = $2 RETURNING relationship_id",
           [message || null, existing.relationship_id]
@@ -465,8 +467,11 @@ app.post("/api/hosts", verifyToken, async (req, res) => {
              VALUES ($1, $2, $3::jsonb)`,
             [
               controllerId,
-              'invite_resent',
-              JSON.stringify({ relationship_id: resurrectResult.rows[0].relationship_id, host_user_id: hostId })
+              "invite_resent",
+              JSON.stringify({
+                relationship_id: resurrectResult.rows[0].relationship_id,
+                host_user_id: hostId,
+              }),
             ]
           );
         } catch (e) {
@@ -476,7 +481,7 @@ app.post("/api/hosts", verifyToken, async (req, res) => {
           success: true,
           message: "Invitation resent successfully",
           relationship_id: resurrectResult.rows[0].relationship_id,
-          resurrected: true
+          resurrected: true,
         });
       }
       // Other statuses (e.g., custom) -> allow new relationship creation by falling through

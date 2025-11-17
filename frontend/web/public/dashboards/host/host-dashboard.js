@@ -193,7 +193,11 @@
 
       const text = await response.text();
       let data;
-      try { data = JSON.parse(text); } catch (_) { data = null; }
+      try {
+        data = JSON.parse(text);
+      } catch (_) {
+        data = null;
+      }
       console.log("Requests raw response text:", text);
       console.log("Requests parsed JSON:", data);
 
@@ -256,7 +260,11 @@
 
       const text = await response.text();
       let data;
-      try { data = JSON.parse(text); } catch (_) { data = null; }
+      try {
+        data = JSON.parse(text);
+      } catch (_) {
+        data = null;
+      }
       console.log("Controllers raw response text:", text);
       console.log("Controllers parsed JSON:", data);
 
@@ -320,10 +328,14 @@
         }
         
         <div class="request-actions">
-          <button class="accept-btn" data-request-id="${request.relationship_id}">
+          <button class="accept-btn" data-request-id="${
+            request.relationship_id
+          }">
             <span>✅</span> Chấp Nhận
           </button>
-          <button class="reject-btn" data-request-id="${request.relationship_id}">
+          <button class="reject-btn" data-request-id="${
+            request.relationship_id
+          }">
             <span>❌</span> Từ Chối
           </button>
         </div>
@@ -360,12 +372,16 @@
               controller.display_name
             )}</div>
             <div class="controller-email">${escapeHtml(controller.email)}</div>
-            <div class="controller-status ${controller.status}">${controller.status === "active" ? "Đang Hoạt Động" : "Không Hoạt Động"}</div>
+            <div class="controller-status ${controller.status}">${
+          controller.status === "active" ? "Đang Hoạt Động" : "Không Hoạt Động"
+        }</div>
           </div>
         </div>
         
         <div class="controller-actions">
-          <button class="revoke-btn" data-relationship-id="${controller.relationship_id}">
+          <button class="revoke-btn" data-relationship-id="${
+            controller.relationship_id
+          }">
             <span>🚫</span> Thu Hồi Quyền
           </button>
         </div>

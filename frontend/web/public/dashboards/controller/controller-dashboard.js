@@ -118,7 +118,10 @@
         const backendErr = translateBackendError(backendErrRaw);
 
         // Special case: relationship already exists -> show pending list
-        if (backendErrRaw && /Relationship already exists/i.test(backendErrRaw)) {
+        if (
+          backendErrRaw &&
+          /Relationship already exists/i.test(backendErrRaw)
+        ) {
           loadPendingInvites();
         }
 
@@ -250,8 +253,7 @@
           );
         } else {
           throw new Error(
-            (data && (data.error || data.message)) ||
-              "Failed to remove host"
+            (data && (data.error || data.message)) || "Failed to remove host"
           );
         }
       } catch (error) {
@@ -450,16 +452,28 @@
       <div class="host-card">
         <div class="host-info">
           <div class="host-avatar">
-            <img src="${inv.profile_image || "https://via.placeholder.com/50"}" alt="Pending" />
+            <img src="${
+              inv.profile_image || "https://via.placeholder.com/50"
+            }" alt="Pending" />
           </div>
           <div class="host-details">
-            <div class="host-name">${escapeHtml(inv.display_name || inv.email)}</div>
+            <div class="host-name">${escapeHtml(
+              inv.display_name || inv.email
+            )}</div>
             <div class="host-email">${escapeHtml(inv.email)}</div>
             <div class="host-status" style="background:rgba(251,191,36,0.15);color:var(--warning);">Đang chờ chấp nhận</div>
           </div>
         </div>
-        <div style="font-size:13px;color:var(--muted);">Gửi lúc: ${new Date(inv.created_at).toLocaleString("vi-VN")}</div>
-        ${inv.invitation_message ? `<div style="margin-top:8px;font-size:13px;">“${escapeHtml(inv.invitation_message)}”</div>` : ""}
+        <div style="font-size:13px;color:var(--muted);">Gửi lúc: ${new Date(
+          inv.created_at
+        ).toLocaleString("vi-VN")}</div>
+        ${
+          inv.invitation_message
+            ? `<div style="margin-top:8px;font-size:13px;">“${escapeHtml(
+                inv.invitation_message
+              )}”</div>`
+            : ""
+        }
       </div>`
       )
       .join("");
@@ -491,12 +505,17 @@
   function translateBackendError(msg) {
     if (!msg) return null;
     const m = msg.toLowerCase();
-    if (m.includes("user not found")) return "Không tìm thấy người dùng với email này";
-    if (m.includes("relationship already exists")) return "Bạn đã gửi lời mời trước đó. Vui lòng chờ người kia chấp nhận.";
-    if (m.includes("invite already pending or active")) return "Lời mời đang chờ hoặc quan hệ đã hoạt động";
-    if (m.includes("invitation resent successfully")) return "Đã gửi lại lời mời thành công";
+    if (m.includes("user not found"))
+      return "Không tìm thấy người dùng với email này";
+    if (m.includes("relationship already exists"))
+      return "Bạn đã gửi lời mời trước đó. Vui lòng chờ người kia chấp nhận.";
+    if (m.includes("invite already pending or active"))
+      return "Lời mời đang chờ hoặc quan hệ đã hoạt động";
+    if (m.includes("invitation resent successfully"))
+      return "Đã gửi lại lời mời thành công";
     if (m.includes("email is required")) return "Vui lòng nhập email";
-    if (m.includes("you cannot invite yourself")) return "Không thể tự mời chính bạn";
+    if (m.includes("you cannot invite yourself"))
+      return "Không thể tự mời chính bạn";
     if (m.includes("failed to add host")) return "Thêm máy chủ thất bại";
     return msg; // fallback
   }
