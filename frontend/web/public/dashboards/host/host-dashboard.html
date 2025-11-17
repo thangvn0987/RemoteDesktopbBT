@@ -1,9 +1,9 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="vi">
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Ephemeral Remote Control - Host Dashboard</title>
+    <title>Remote Desktop - Bảng Máy Chủ (Host)</title>
     <link rel="stylesheet" href="./host-dashboard.css" />
   </head>
   <body>
@@ -11,7 +11,7 @@
     <header class="header">
       <div class="header-content">
         <div class="logo-section">
-          <h1>🖥️ Host Dashboard</h1>
+          <h1>🖥️ Bảng Máy Chủ (Host)</h1>
         </div>
 
         <div class="profile-section">
@@ -30,9 +30,9 @@
           <div class="dropdown">
             <button class="dropdown-btn" id="profile-menu">⚙️</button>
             <div class="dropdown-content" id="dropdown-menu">
-              <a href="#" id="switch-role">Switch to Controller Mode</a>
-              <a href="#" id="settings">Settings</a>
-              <a href="#" id="logout">Logout</a>
+              <a href="#" id="switch-role">Chuyển sang chế độ Controller</a>
+              <a href="#" id="settings">Cài đặt</a>
+              <a href="#" id="logout">Đăng xuất</a>
             </div>
           </div>
         </div>
@@ -44,31 +44,30 @@
       <div class="container">
         <!-- Host Linking Section -->
         <section class="host-linking-section">
-          <h2>🖥️ Link This Computer</h2>
+          <h2>🖥️ Liên Kết Máy Tính Này</h2>
 
           <!-- Download Helper Agent -->
           <div class="link-card download-card">
-            <h3>Step 1: Download Helper Agent</h3>
-            <p>Download and run the helper agent on this Windows computer.</p>
+            <h3>Bước 1: Tải Helper Agent</h3>
+            <p>Tải và chạy helper trên máy Windows này.</p>
             <a
               href="/downloads/remotebt_helper.exe"
               download
               class="download-btn"
             >
-              ⬇️ Download remotebt_helper.exe
+              ⬇️ Tải remotebt_helper.exe
             </a>
-            <p class="download-info">Windows only • Size: ~500 KB</p>
+            <p class="download-info">Chỉ chạy trên Windows • Kích thước: ~500 KB</p>
           </div>
 
           <!-- Link Computer -->
           <div class="link-card">
-            <h3>Step 2: Link This Computer</h3>
+            <h3>Bước 2: Liên kết máy tính</h3>
             <p>
-              After running the helper agent, click below to send configuration
-              automatically.
+              Sau khi chạy helper, bấm nút bên dưới để gửi cấu hình tự động.
             </p>
             <button class="link-btn" id="btnLinkHost">
-              Link This Computer
+              Liên Kết Máy Này
             </button>
             <div class="link-status" id="link-status"></div>
           </div>
@@ -76,42 +75,41 @@
 
         <!-- Pending Requests Section -->
         <section class="requests-section">
-          <h2>Connection Requests</h2>
+          <h2>Yêu Cầu Kết Nối</h2>
           <div class="requests-grid" id="requests-grid">
             <!-- Loading state -->
             <div class="loading-state" id="requests-loading">
               <div class="loading-spinner">🔄</div>
-              <p>Loading requests...</p>
+              <p>Đang tải yêu cầu...</p>
             </div>
           </div>
 
           <!-- Empty state for requests -->
           <div class="empty-state" id="requests-empty" style="display: none">
             <div class="empty-icon">📭</div>
-            <h3>No pending requests</h3>
+            <h3>Chưa có yêu cầu</h3>
             <p>
-              When someone wants to control your computer, their requests will
-              appear here
+              Khi ai đó muốn điều khiển máy bạn, yêu cầu sẽ hiện ở đây.
             </p>
           </div>
         </section>
 
         <!-- Controllers Section -->
         <section class="controllers-section">
-          <h2>My Controllers</h2>
+          <h2>Controller Của Tôi</h2>
           <div class="controllers-grid" id="controllers-grid">
             <!-- Loading state -->
             <div class="loading-state" id="controllers-loading">
               <div class="loading-spinner">🔄</div>
-              <p>Loading controllers...</p>
+              <p>Đang tải danh sách controller...</p>
             </div>
           </div>
 
           <!-- Empty state for controllers -->
           <div class="empty-state" id="controllers-empty" style="display: none">
             <div class="empty-icon">🎮</div>
-            <h3>No controllers yet</h3>
-            <p>Controllers you've granted access to will appear here</p>
+            <h3>Chưa có controller</h3>
+            <p>Những người bạn cấp quyền sẽ xuất hiện ở đây</p>
           </div>
         </section>
       </div>

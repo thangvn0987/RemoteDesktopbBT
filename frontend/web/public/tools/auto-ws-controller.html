@@ -1,17 +1,17 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="vi">
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>RemoteBT Auto WS Controller</title>
+    <title>RemoteBT - Bộ Điều Khiển WS Tự Động</title>
     <link rel="stylesheet" href="../tools/ws.css" />
   </head>
   <body>
-    <h2>Auto WS Controller</h2>
+    <h2>Bộ Điều Khiển WebSocket Tự Động</h2>
     <fieldset>
-      <legend>Signaling</legend>
+      <legend>Tín hiệu (Signaling)</legend>
       <div class="row">
-        <label>Signaling host:port</label>
+        <label>Host:Port tín hiệu</label>
         <input
           id="sigHost"
           type="text"
@@ -20,30 +20,28 @@
         />
         :
         <input id="sigPort" type="number" value="8444" />
-        <button id="btnHealth" style="margin-left: 8px">Health</button>
+        <button id="btnHealth" style="margin-left: 8px">Kiểm tra</button>
       </div>
       <div class="row">
-        <button id="btnSession">Create session & connect</button>
+        <button id="btnSession">Tạo phiên & kết nối</button>
         <span id="status"></span>
         <span id="helper" style="margin-left: 12px"></span>
         <span id="ping" style="margin-left: 12px; font-weight: 500"></span>
-        <button id="btnReconnect" style="margin-left: 12px; display: none">
-          Reconnect
-        </button>
+        <button id="btnReconnect" style="margin-left: 12px; display: none">Kết nối lại</button>
       </div>
     </fieldset>
 
     <fieldset>
-      <legend>Controls</legend>
+      <legend>Điều khiển</legend>
       <div class="row">
-        <label>Preview</label>
-        <button id="btnCapOn">Start Capture</button>
-        <button id="btnCapOff">Stop</button>
-        every
+        <label>Xem trước</label>
+        <button id="btnCapOn">Bắt đầu Capture</button>
+        <button id="btnCapOff">Dừng</button>
+        mỗi
         <input id="ival" type="number" value="500" style="width: 80px" /> ms
       </div>
       <div class="row">
-        <label>Quality</label>
+        <label>Chất lượng</label>
         <input
           id="quality"
           type="range"
@@ -58,8 +56,8 @@
         </span>
       </div>
       <div class="row">
-        <label>Keyboard</label>
-        <button id="kbToggle">Start Keyboard Capture</button>
+        <label>Bàn phím</label>
+        <button id="kbToggle">Bắt đầu thu phím</button>
         <span id="kbStatus" style="margin-left: 8px"></span>
       </div>
       <div class="row">
@@ -80,12 +78,12 @@
     <fieldset>
       <legend>Log</legend>
       <div class="row">
-        <label>Verbose log</label>
+        <label>Chi tiết log</label>
         <input id="verbose" type="checkbox" checked />
         <span style="font-size: 12px; color: #666"
           >(bỏ chọn để giảm lag khi spam phím / move)</span
         >
-        <button id="btnClear" style="margin-left: 12px">Clear</button>
+        <button id="btnClear" style="margin-left: 12px">Xóa</button>
       </div>
       <div id="log"></div>
     </fieldset>
