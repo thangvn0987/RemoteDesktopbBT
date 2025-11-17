@@ -43,9 +43,15 @@ static std::atomic<int> g_lastX{0};
 static std::atomic<int> g_lastY{0};
 
 static void mouse_move_abs(int x,int y){ SetCursorPos(x,y); }
-static void mouse_move_virtual(int x,int y){ SetCursorPos(x + g_vx, y + g_vy); }
+static void mouse_move_virtual(int x,int y){ 
+	SetCursorPos(x + g_vx, y + g_vy); 
+}
 static void mouse_btn(const std::string &btn,bool down){ std::string b=btn; for(char &c:b)c=(char)tolower(c); DWORD f=0; if(b=="left") f=down?MOUSEEVENTF_LEFTDOWN:MOUSEEVENTF_LEFTUP; else if(b=="right") f=down?MOUSEEVENTF_RIGHTDOWN:MOUSEEVENTF_RIGHTUP; else if(b=="middle") f=down?MOUSEEVENTF_MIDDLEDOWN:MOUSEEVENTF_MIDDLEUP; if(!f) return; INPUT in{}; in.type=INPUT_MOUSE; in.mi.dwFlags=f; SendInput(1,&in,sizeof(INPUT)); }
-static void mouse_click(const std::string &btn){ mouse_btn(btn,true); sleep_ms(10); mouse_btn(btn,false); }
+static void mouse_click(const std::string &btn){ 
+	mouse_btn(btn,true); 
+	sleep_ms(10); 
+	mouse_btn(btn,false); 
+}
 static void mouse_scroll(int delta){ INPUT in{}; in.type=INPUT_MOUSE; in.mi.dwFlags=MOUSEEVENTF_WHEEL; in.mi.mouseData=delta; SendInput(1,&in,sizeof(INPUT)); }
 static WORD vk_from_name(const std::string &name){
 	std::string n=name; for(char &c:n)c=(char)tolower(c);
@@ -91,19 +97,44 @@ static void send_vk_up(WORD vk){
 static void press_vk(WORD vk){ send_vk_down(vk); send_vk_up(vk); }
 static void type_text(const std::string &txt){ auto w=utf8_to_wide(txt); if(w.empty()) return; std::vector<INPUT> seq; seq.reserve(w.size()*2); for(auto ch: w){ INPUT d{}; d.type=INPUT_KEYBOARD; d.ki.wScan=ch; d.ki.dwFlags=KEYEVENTF_UNICODE; seq.push_back(d); INPUT u=d; u.ki.dwFlags=KEYEVENTF_UNICODE|KEYEVENTF_KEYUP; seq.push_back(u);} SendInput((UINT)seq.size(), seq.data(), sizeof(INPUT)); }
 static void send_combo(const std::string &combo){
-	std::string tmp; for(char c:combo) tmp.push_back(c=='+'?' ':c);
+	std::string tmp; 
+	for(char c:combo) tmp.push_back(c=='+'?' ':c);
 	auto parts=split_ws(tmp);
 	std::vector<WORD> down;
 	for(auto &p:parts){
-		std::string n=p; for(char &c:n)c=(char)tolower(c);
-		WORD vk=0; if(n=="ctrl") vk=VK_CONTROL; else if(n=="alt") vk=VK_MENU; else if(n=="shift") vk=VK_SHIFT; else vk=vk_from_name(p);
-		if(vk){ send_vk_down(vk); down.push_back(vk);} }
-	for(size_t i=0;i<down.size();++i){ WORD vk = down[down.size()-1-i]; send_vk_up(vk); }
+		std::string n=p; 
+		for(char &c:n)c=(char)tolower(c);
+		WORD vk=0; 
+		if(n=="ctrl") vk=VK_CONTROL; 
+		else if(n=="alt") vk=VK_MENU; 
+		else if(n=="shift") vk=VK_SHIFT; 
+		else vk=vk_from_name(p);
+		if(vk){ 
+			send_vk_down(vk); 
+			down.push_back(vk);
+		} 
+	}
+	for(size_t i=0;i<down.size();++i){ 
+		WORD vk = down[down.size()-1-i]; 
+		send_vk_up(vk); 
+	}
 }
 
 // ---------------- Networking ----------------
 struct Tcp { SOCKET s=INVALID_SOCKET; static bool init(){ WSADATA w; return WSAStartup(MAKEWORD(2,2),&w)==0; } static void done(){ WSACleanup(); } void close(){ if(s!=INVALID_SOCKET){ closesocket(s); s=INVALID_SOCKET; } } };
-static bool tcp_listen(uint16_t port, Tcp &srv){ srv.s=socket(AF_INET,SOCK_STREAM,IPPROTO_TCP); if(srv.s==INVALID_SOCKET) return false; sockaddr_in a{}; a.sin_family=AF_INET; a.sin_addr.s_addr=htonl(INADDR_ANY); a.sin_port=htons(port); int yes=1; setsockopt(srv.s,SOL_SOCKET,SO_REUSEADDR,(const char*)&yes,sizeof(yes)); if(bind(srv.s,(sockaddr*)&a,sizeof(a))!=0) return false; if(listen(srv.s,1)!=0) return false; return true; }
+static bool tcp_listen(uint16_t port, Tcp &srv){ 
+	srv.s=socket(AF_INET,SOCK_STREAM,IPPROTO_TCP);
+	if(srv.s==INVALID_SOCKET) return false; 
+	sockaddr_in a{}; 
+	a.sin_family=AF_INET; 
+	a.sin_addr.s_addr=htonl(INADDR_ANY); 
+	a.sin_port=htons(port);
+	int yes=1;
+	setsockopt(srv.s,SOL_SOCKET,SO_REUSEADDR,(const char*)&yes,sizeof(yes));
+	if(bind(srv.s,(sockaddr*)&a,sizeof(a))!=0) return false; 
+	if(listen(srv.s,1)!=0) return false; 
+	return true;
+	}
 static bool tcp_accept(Tcp &srv, Tcp &cli){ cli.s=accept(srv.s,nullptr,nullptr); return cli.s!=INVALID_SOCKET; }
 static bool tcp_connect(const std::string &host,uint16_t port, Tcp &cli){ cli.s=socket(AF_INET,SOCK_STREAM,IPPROTO_TCP); if(cli.s==INVALID_SOCKET) return false; sockaddr_in a{}; a.sin_family=AF_INET; inet_pton(AF_INET,host.c_str(),&a.sin_addr); a.sin_port=htons(port); return connect(cli.s,(sockaddr*)&a,sizeof(a))==0; }
 static int tcp_send(Tcp &c,const std::string &d){ return send(c.s,d.c_str(),(int)d.size(),0); }
@@ -220,7 +251,11 @@ static void capture_loop(){
 	}
 }
 
-static bool handle_command(const std::string &line, bool &authed){ auto parts=split_ws(line); if(parts.empty()) return true; std::string cmd=parts[0]; for(char &c:cmd)c=(char)tolower(c);
+static bool handle_command(const std::string &line, bool &authed){ 
+	auto parts=split_ws(line); 
+	if(parts.empty()) return true; 
+	std::string cmd=parts[0]; 
+	for(char &c:cmd)c=(char)tolower(c);
 	if(cmd=="auth"){ 
 		// In agent mode (authed=true), ignore AUTH from server (server sends AUTH as compat check)
 		if(authed) return true;
@@ -229,7 +264,8 @@ static bool handle_command(const std::string &line, bool &authed){ auto parts=sp
 		return true; 
 	}
 	if(!authed){ std::cout<<"ERR need AUTH first\n"; return true; }
-	if(cmd=="move" && parts.size()>=3){
+	if(cmd=="move" && parts.size()>=3)
+	{
 		// Throttle MOVE to max 60fps (16ms) to reduce CPU overhead
 		static DWORD lastMoveTime = 0;
 		DWORD now = GetTickCount();
@@ -241,44 +277,72 @@ static bool handle_command(const std::string &line, bool &authed){ auto parts=sp
 		g_lastX.store(x); g_lastY.store(y);
 		mouse_move_virtual(x, y);
 		// Removed OK log to reduce I/O spam (30-60 calls/sec)
-		return true; }
-	if(cmd=="click" && parts.size()>=2){ mouse_click(parts[1]); return true; }
+		return true; 
+	}
+	if(cmd=="click" && parts.size()>=2){ 
+		mouse_click(parts[1]); 
+		return true; 
+	}
 	if(cmd=="down" && parts.size()>=2){ mouse_btn(parts[1],true); return true; }
 	if(cmd=="up" && parts.size()>=2){ mouse_btn(parts[1],false); return true; }
 	if(cmd=="scroll" && parts.size()>=2){ mouse_scroll(std::stoi(parts[1])); return true; }
 	if(cmd=="type" && parts.size()>=2){
 		// Ensure target window focused by synthetic click at current cursor location
-		POINT pt; if(GetCursorPos(&pt)){ mouse_click("left"); }
+		POINT pt; 
+		if(GetCursorPos(&pt)){ mouse_click("left"); }
 		auto text=line.substr(line.find(' ')+1);
 		type_text(text);
 		// Removed verbose log
 		return true;
 	}
-		if(cmd=="key" && parts.size()>=2){
-		POINT pt; if(GetCursorPos(&pt)){ mouse_click("left"); }
-		send_combo(parts[1]);
-		// Removed verbose log
+	if(cmd=="key" && parts.size()>=2){
+	POINT pt; if(GetCursorPos(&pt)){ mouse_click("left"); }
+	send_combo(parts[1]);
+	// Removed verbose log
+	return true;
+	}
+	if(cmd=="keydown" && parts.size()>=2){
+		WORD vk = vk_from_name(parts[1]);
+		if(vk){
+			// Đảm bảo focus: đưa cửa sổ dưới vị trí con trỏ cuối cùng lên foreground
+			std::string raw = parts[1]; 
+			std::string low=raw; 
+			for(char &c:low)c=(char)tolower(c);
+			if(low!="ctrl" && low!="alt" && low!="shift"){
+				focus_window_under_last_pointer();
+			}
+			send_vk_down(vk);
+			// Removed verbose log
+		} else { std::cout<<"ERR keydown\n"; }
 		return true;
 	}
-		if(cmd=="keydown" && parts.size()>=2){
-			WORD vk = vk_from_name(parts[1]);
-			if(vk){
-				// Đảm bảo focus: đưa cửa sổ dưới vị trí con trỏ cuối cùng lên foreground
-				std::string raw = parts[1]; std::string low=raw; for(char &c:low)c=(char)tolower(c);
-				if(low!="ctrl" && low!="alt" && low!="shift"){
-					focus_window_under_last_pointer();
-				}
-				send_vk_down(vk);
-				// Removed verbose log
-			} else { std::cout<<"ERR keydown\n"; }
-			return true;
-		}
-		if(cmd=="keyup" && parts.size()>=2){
-			WORD vk = vk_from_name(parts[1]);
-			if(vk){ send_vk_up(vk); /* Removed verbose log */ } else { std::cout<<"ERR keyup\n"; }
-			return true;
-		}
-	if(cmd=="capture"){ if(parts.size()>=2){ std::string onoff=parts[1]; for(char &c:onoff)c=(char)tolower(c); if(onoff=="on"){ if(parts.size()>=3) g_capture_interval_ms = std::max(100, std::stoi(parts[2])); if(!g_capture){ g_capture=true; g_capture_thread=std::thread(capture_loop);} return true; } else if(onoff=="off"){ if(g_capture){ g_capture=false; if(g_capture_thread.joinable()) g_capture_thread.join(); } return true; } } std::cout<<"ERR usage CAPTURE ON [interval_ms]|OFF\n"; return true; }
+	if(cmd=="keyup" && parts.size()>=2){
+		WORD vk = vk_from_name(parts[1]);
+		if(vk){ send_vk_up(vk); /* Removed verbose log */ } else { std::cout<<"ERR keyup\n"; }
+		return true;
+	}
+	if(cmd=="capture"){ 
+		if(parts.size()>=2){ 
+			std::string onoff=parts[1]; 
+			for(char &c:onoff)c=(char)tolower(c); 
+			if(onoff=="on"){ 
+				if(parts.size()>=3) g_capture_interval_ms = std::max(100, std::stoi(parts[2])); 
+				if(!g_capture){ 
+					g_capture=true; 
+					g_capture_thread=std::thread(capture_loop);
+				} 
+				return true; 
+			} else if(onoff=="off"){ 
+				if(g_capture){ 
+					g_capture=false; 
+					if(g_capture_thread.joinable()) g_capture_thread.join(); 
+				} 
+				return true; 
+			} 
+		} 
+		std::cout<<"ERR usage CAPTURE ON [interval_ms]|OFF\n"; 
+		return true; 
+	}
 	// Quality command: QUALITY 50-90 (JPEG quality, lower=smaller file, higher=better quality)
 	if(cmd=="quality" && parts.size()>=2){ int q = std::stoi(parts[1]); g_jpeg_quality = std::max(1, std::min(100, q)); /* Removed verbose log */ return true; }
 	// Clipboard set: CLIPSET <base64>
@@ -353,7 +417,10 @@ static bool read_config(std::string &server_host, uint16_t &port, std::string &t
 
 // Mini HTTP server for config mode
 static int run_config_server(uint16_t port) {
-	if(!Tcp::init()){ std::fprintf(stderr,"WSA init failed\n"); return 1; }
+	if(!Tcp::init()){ 
+		std::fprintf(stderr,"WSA init failed\n"); 
+		return 1; 
+	}
 	Tcp srv;
 	if(!tcp_listen(port, srv)){
 		std::fprintf(stderr,"[config] bind/listen failed on port %u (err=%lu)\n", port, GetLastError());
@@ -371,7 +438,10 @@ static int run_config_server(uint16_t port) {
 		std::string req;
 		char buf[4096];
 		int n = tcp_recv(cli, buf, sizeof(buf)-1);
-		if(n <= 0) { cli.close(); continue; }
+		if(n <= 0) { 
+			cli.close(); 
+			continue; 
+		}
 		buf[n] = '\0';
 		req = buf;
 		
@@ -494,7 +564,9 @@ static int run_config_server(uint16_t port) {
 
 int main(int argc,char **argv){
 	// init GDI+
-	ULONG_PTR gdipToken=0; Gdiplus::GdiplusStartupInput gsi; Gdiplus::GdiplusStartup(&gdipToken, &gsi, nullptr);
+	ULONG_PTR gdipToken=0; 
+	Gdiplus::GdiplusStartupInput gsi; 
+	Gdiplus::GdiplusStartup(&gdipToken, &gsi, nullptr);
 	// Enable DPI awareness so GetSystemMetrics returns physical pixels
 	HMODULE user32 = GetModuleHandleA("user32.dll");
 	if(user32){
@@ -562,8 +634,11 @@ int main(int argc,char **argv){
 	// forward declare run_agent with reconnect
 	auto run_agent = [&](const std::string &h,uint16_t p)->int{
 		if(!Tcp::init()){ std::fprintf(stderr,"WSA init failed\n"); return 1; }
-		int attempt=0; bool stop=false; while(!stop){
-			Tcp cli; if(!tcp_connect(h,p,cli)){
+		int attempt=0; 
+		bool stop=false; 
+		while(!stop){
+			Tcp cli; 
+			if(!tcp_connect(h,p,cli)){
 				long err = GetLastError();
 				int delay = std::min(30000, (1<<std::min(attempt,10)) * 250); // 250ms, 500ms, 1s, 2s... up to ~30s
 				std::fprintf(stderr,"[agent] connect failed %s:%u (err=%ld), retry in %d ms\n", h.c_str(), p, err, delay);
@@ -585,13 +660,39 @@ int main(int argc,char **argv){
 				std::snprintf(bufGeom, sizeof(bufGeom), "GEOM %d %d %d %d\n", g_vx, g_vy, g_vw, g_vh);
 				tcp_send(cli, bufGeom);
 			}
-			std::string acc; acc.reserve(4096); char buf[1024]; bool authed=true;
-			while(true){ int n=tcp_recv(cli,buf,sizeof(buf)); if(n<=0) break; for(int i=0;i<n;++i){ char ch=buf[i]; if(ch=='\n'){ bool cont=handle_command(acc,authed); acc.clear(); if(!cont){ stop=true; break; } } else if(ch!='\r'){ acc.push_back(ch);} } if(stop) break; }
+			std::string acc; 
+			acc.reserve(4096); 
+			char buf[1024]; 
+			bool authed=true;
+			while(true){ 
+				int n=tcp_recv(cli,buf,sizeof(buf)); 
+				if(n<=0) break; 
+				for(int i=0;i<n;++i){ 
+					char ch=buf[i]; 
+					if(ch=='\n'){ 
+						bool cont=handle_command(acc,authed); 
+						acc.clear(); 
+						if(!cont){ 
+							stop=true; 
+							break; 
+						} 
+					} else if(ch!='\r'){ 
+						acc.push_back(ch);
+					} 
+				} if(stop) break; 
+			}
 			// connection closed: ensure capture thread stopped
-			if(g_capture){ g_capture=false; if(g_capture_thread.joinable()) g_capture_thread.join(); }
-			g_client_sock=INVALID_SOCKET; cli.close(); if(stop) break; // else reconnect
+			if(g_capture){ 
+				g_capture=false; 
+				if(g_capture_thread.joinable()) g_capture_thread.join(); 
+			}
+			g_client_sock=INVALID_SOCKET; 
+			cli.close(); 
+			if(stop) break; // else reconnect
 		}
-		Tcp::done(); return 0; };
+		Tcp::done(); 
+		return 0; 
+	};
 
 	int rc = isServer? run_server(port) : (isClient? run_client(host,port,demo) : (isConfig? run_config_server(configPort) : run_agent(host,port)));
 	Gdiplus::GdiplusShutdown(gdipToken);

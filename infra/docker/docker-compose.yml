@@ -11,7 +11,6 @@ services:
     depends_on:
       - signaling
       - auth
-      - session
 
   signaling:
     build: ../../services/signaling-service
@@ -53,22 +52,6 @@ services:
     image: remotebt/auth:dev
     ports:
       - "8081:8081"
-    env_file:
-      - ./.env
-
-  session:
-    build: ../../services/session-service
-    image: remotebt/session:dev
-    ports:
-      - "8082:8082"
-    env_file:
-      - ./.env
-
-  audit:
-    build: ../../services/audit-service
-    image: remotebt/audit:dev
-    ports:
-      - "8083:8083"
     env_file:
       - ./.env
 
