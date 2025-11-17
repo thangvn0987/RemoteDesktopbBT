@@ -191,15 +191,18 @@
         throw new Error(`HTTP ${response.status}: ${response.statusText}`);
       }
 
-      const data = await response.json();
-      console.log("Requests data received:", data);
+      const text = await response.text();
+      let data;
+      try { data = JSON.parse(text); } catch (_) { data = null; }
+      console.log("Requests raw response text:", text);
+      console.log("Requests parsed JSON:", data);
 
       // Hide loading state
       if (requestsLoading) {
         requestsLoading.style.display = "none";
       }
 
-      if (data.success && data.requests) {
+      if (data && data.success && data.requests) {
         renderRequests(data.requests);
       } else {
         throw new Error("Invalid response format");
@@ -251,15 +254,18 @@
         throw new Error(`HTTP ${response.status}: ${response.statusText}`);
       }
 
-      const data = await response.json();
-      console.log("Controllers data received:", data);
+      const text = await response.text();
+      let data;
+      try { data = JSON.parse(text); } catch (_) { data = null; }
+      console.log("Controllers raw response text:", text);
+      console.log("Controllers parsed JSON:", data);
 
       // Hide loading state
       if (controllersLoading) {
         controllersLoading.style.display = "none";
       }
 
-      if (data.success && data.controllers) {
+      if (data && data.success && data.controllers) {
         renderControllers(data.controllers);
       } else {
         throw new Error("Invalid response format");
@@ -314,15 +320,11 @@
         }
         
         <div class="request-actions">
-          <button class="accept-btn" data-request-id="${
-            request.relationship_id
-          }">
-            <span>✅</span> Accept
+          <button class="accept-btn" data-request-id="${request.relationship_id}">
+            <span>✅</span> Chấp Nhận
           </button>
-          <button class="reject-btn" data-request-id="${
-            request.relationship_id
-          }">
-            <span>❌</span> Reject
+          <button class="reject-btn" data-request-id="${request.relationship_id}">
+            <span>❌</span> Từ Chối
           </button>
         </div>
       </div>
@@ -358,17 +360,13 @@
               controller.display_name
             )}</div>
             <div class="controller-email">${escapeHtml(controller.email)}</div>
-            <div class="controller-status ${controller.status}">${
-          controller.status === "active" ? "Active" : "Inactive"
-        }</div>
+            <div class="controller-status ${controller.status}">${controller.status === "active" ? "Đang Hoạt Động" : "Không Hoạt Động"}</div>
           </div>
         </div>
         
         <div class="controller-actions">
-          <button class="revoke-btn" data-relationship-id="${
-            controller.relationship_id
-          }">
-            <span>🚫</span> Revoke Access
+          <button class="revoke-btn" data-relationship-id="${controller.relationship_id}">
+            <span>🚫</span> Thu Hồi Quyền
           </button>
         </div>
       </div>
@@ -533,11 +531,10 @@
     const date = new Date(timestamp);
     const now = new Date();
     const diff = now - date;
-
-    if (diff < 60000) return "Just now";
-    if (diff < 3600000) return `${Math.floor(diff / 60000)}m ago`;
-    if (diff < 86400000) return `${Math.floor(diff / 3600000)}h ago`;
-    return `${Math.floor(diff / 86400000)}d ago`;
+    if (diff < 60000) return "Vừa xong";
+    if (diff < 3600000) return `${Math.floor(diff / 60000)} phút trước`;
+    if (diff < 86400000) return `${Math.floor(diff / 3600000)} giờ trước`;
+    return `${Math.floor(diff / 86400000)} ngày trước`;
   }
 
   // Load current user profile and update header UI
@@ -590,6 +587,13 @@
     // Load data
     loadRequests();
     loadControllers();
+
+    // Poll every 30s for new requests/controllers
+    setInterval(() => {
+      console.log("Polling updates...");
+      loadRequests();
+      loadControllers();
+    }, 30000);
 
     console.log("Host Dashboard initialized successfully");
   }

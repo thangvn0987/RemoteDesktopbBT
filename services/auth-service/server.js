@@ -440,14 +440,46 @@ app.post("/api/hosts", verifyToken, async (req, res) => {
 
     const hostId = hostResult.rows[0].id;
 
-    // Check if relationship already exists
+    // Check if relationship already exists (any status)
     const existingResult = await pool.query(
-      "SELECT * FROM host_relationships WHERE controller_user_id = $1 AND host_user_id = $2",
+      "SELECT * FROM host_relationships WHERE controller_user_id = $1 AND host_user_id = $2 ORDER BY updated_at DESC NULLS LAST, created_at DESC",
       [controllerId, hostId]
     );
 
     if (existingResult.rows.length > 0) {
-      return res.status(400).json({ error: "Relationship already exists" });
+      const existing = existingResult.rows[0];
+      // If status is pending or active -> block
+      if (existing.status === 'pending' || existing.status === 'active') {
+        return res.status(400).json({ error: "Invite already pending or active" });
+      }
+      // If previously rejected -> resurrect by updating to pending
+      if (existing.status === 'rejected') {
+        const resurrectResult = await pool.query(
+          "UPDATE host_relationships SET status = 'pending', invitation_message = $1, updated_at = NOW() WHERE relationship_id = $2 RETURNING relationship_id",
+          [message || null, existing.relationship_id]
+        );
+        // Audit log: invite resent
+        try {
+          await pool.query(
+            `INSERT INTO audit_logs (user_id, action, details)
+             VALUES ($1, $2, $3::jsonb)`,
+            [
+              controllerId,
+              'invite_resent',
+              JSON.stringify({ relationship_id: resurrectResult.rows[0].relationship_id, host_user_id: hostId })
+            ]
+          );
+        } catch (e) {
+          console.warn("Audit log (invite_resent) failed:", e.message);
+        }
+        return res.json({
+          success: true,
+          message: "Invitation resent successfully",
+          relationship_id: resurrectResult.rows[0].relationship_id,
+          resurrected: true
+        });
+      }
+      // Other statuses (e.g., custom) -> allow new relationship creation by falling through
     }
 
     // Create new relationship

@@ -471,6 +471,19 @@ body {
   min-height: 80px;
 }
 
+/* Inline form error */
+.form-error {
+  margin-top: -8px;
+  margin-bottom: 16px;
+  font-size: 13px;
+  color: var(--danger);
+  background: rgba(248, 113, 113, 0.08);
+  border: 1px solid rgba(248, 113, 113, 0.4);
+  padding: 8px 12px;
+  border-radius: 6px;
+  display: none; /* shown when has error */
+}
+
 .modal-footer {
   display: flex;
   justify-content: flex-end;

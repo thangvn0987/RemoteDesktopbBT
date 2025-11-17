@@ -88,6 +88,13 @@
 
     console.log("Adding new host:", { email, message });
 
+    // Clear previous inline error
+    const errorBox = document.getElementById("add-host-error");
+    if (errorBox) {
+      errorBox.style.display = "none";
+      errorBox.textContent = "";
+    }
+
     try {
       const token = localStorage.getItem("auth_token");
       const response = await fetch(`${APP_CONFIG.AUTH_BASE}/api/hosts`, {
@@ -99,27 +106,47 @@
         body: JSON.stringify({ email, message }),
       });
 
-      if (!response.ok) {
-        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+      let data;
+      try {
+        data = await response.json();
+      } catch (_) {
+        data = null;
       }
 
-      const data = await response.json();
+      if (!response.ok) {
+        const backendErrRaw = data && (data.error || data.message);
+        const backendErr = translateBackendError(backendErrRaw);
 
-      if (data.success) {
-        showNotification(`Invitation sent to ${email}!`, "success");
+        // Special case: relationship already exists -> show pending list
+        if (backendErrRaw && /Relationship already exists/i.test(backendErrRaw)) {
+          loadPendingInvites();
+        }
 
-        // Reset form and close modal
+        throw new Error(
+          backendErr || `HTTP ${response.status}: ${response.statusText}`
+        );
+      }
+
+      if (data && data.success) {
+        showNotification(`Đã gửi lời mời đến ${email}!`, "success");
         addHostForm.reset();
         hideModal();
-
-        // Reload hosts to show updated list
         loadHosts();
+        loadPendingInvites();
       } else {
-        throw new Error(data.error || "Failed to send invitation");
+        const backendErrRaw = data && (data.error || data.message);
+        throw new Error(
+          translateBackendError(backendErrRaw) || "Gửi lời mời thất bại"
+        );
       }
     } catch (error) {
       console.error("Add host error:", error);
-      showNotification(`Failed to add host: ${error.message}`, "error");
+      if (errorBox) {
+        errorBox.textContent = error.message;
+        errorBox.style.display = "block";
+      } else {
+        showNotification(`Thêm máy chủ thất bại: ${error.message}`, "error");
+      }
     }
   });
 
@@ -200,26 +227,32 @@
           }
         );
 
-        if (!response.ok) {
-          throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+        let data;
+        try {
+          data = await response.json();
+        } catch (_) {
+          data = null;
         }
 
-        const data = await response.json();
+        if (!response.ok) {
+          const backendErr = data && (data.error || data.message);
+          throw new Error(
+            backendErr || `HTTP ${response.status}: ${response.statusText}`
+          );
+        }
 
-        if (data.success) {
-          // Remove from DOM
+        if (data && data.success) {
           hostCard.remove();
-
-          // Check if hosts grid is empty
           checkEmptyState();
-
-          // Show success message
           showNotification(
             `${hostName} has been removed from your hosts list.`,
             "success"
           );
         } else {
-          throw new Error(data.error || "Failed to remove host");
+          throw new Error(
+            (data && (data.error || data.message)) ||
+              "Failed to remove host"
+          );
         }
       } catch (error) {
         console.error("Remove host error:", error);
@@ -400,6 +433,74 @@
     checkEmptyState();
   }
 
+  // Render pending invitations
+  function renderPendingInvites(invites) {
+    const section = document.getElementById("pending-invites-section");
+    const grid = document.getElementById("pending-invites-grid");
+    if (!section || !grid) return;
+
+    if (!invites || invites.length === 0) {
+      section.style.display = "none";
+      return;
+    }
+
+    const html = invites
+      .map(
+        (inv) => `
+      <div class="host-card">
+        <div class="host-info">
+          <div class="host-avatar">
+            <img src="${inv.profile_image || "https://via.placeholder.com/50"}" alt="Pending" />
+          </div>
+          <div class="host-details">
+            <div class="host-name">${escapeHtml(inv.display_name || inv.email)}</div>
+            <div class="host-email">${escapeHtml(inv.email)}</div>
+            <div class="host-status" style="background:rgba(251,191,36,0.15);color:var(--warning);">Đang chờ chấp nhận</div>
+          </div>
+        </div>
+        <div style="font-size:13px;color:var(--muted);">Gửi lúc: ${new Date(inv.created_at).toLocaleString("vi-VN")}</div>
+        ${inv.invitation_message ? `<div style="margin-top:8px;font-size:13px;">“${escapeHtml(inv.invitation_message)}”</div>` : ""}
+      </div>`
+      )
+      .join("");
+
+    grid.innerHTML = html;
+    section.style.display = "block";
+  }
+
+  // Load pending invitations
+  async function loadPendingInvites() {
+    console.log("Loading pending invites...");
+    try {
+      const token = localStorage.getItem("auth_token");
+      if (!token) return;
+      const res = await fetch(`${APP_CONFIG.AUTH_BASE}/api/hosts/pending`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const data = await res.json();
+      if (data.success) {
+        renderPendingInvites(data.invitations || []);
+      }
+    } catch (err) {
+      console.warn("Failed to load pending invites", err);
+    }
+  }
+
+  // Map backend English errors to Vietnamese
+  function translateBackendError(msg) {
+    if (!msg) return null;
+    const m = msg.toLowerCase();
+    if (m.includes("user not found")) return "Không tìm thấy người dùng với email này";
+    if (m.includes("relationship already exists")) return "Bạn đã gửi lời mời trước đó. Vui lòng chờ người kia chấp nhận.";
+    if (m.includes("invite already pending or active")) return "Lời mời đang chờ hoặc quan hệ đã hoạt động";
+    if (m.includes("invitation resent successfully")) return "Đã gửi lại lời mời thành công";
+    if (m.includes("email is required")) return "Vui lòng nhập email";
+    if (m.includes("you cannot invite yourself")) return "Không thể tự mời chính bạn";
+    if (m.includes("failed to add host")) return "Thêm máy chủ thất bại";
+    return msg; // fallback
+  }
+
   // HTML escape utility
   function escapeHtml(text) {
     const div = document.createElement("div");
@@ -412,6 +513,7 @@
     console.log("Initializing Controller Dashboard...");
     loadUserProfile();
     loadHosts();
+    loadPendingInvites();
 
     // Check authentication
     // TODO: Verify user is logged in and has controller role
