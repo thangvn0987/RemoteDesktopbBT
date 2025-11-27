@@ -11,7 +11,8 @@ services:
     depends_on:
       - signaling
       - auth
-
+    volumes:
+      - ../../frontend/web/public/downloads:/usr/share/nginx/html/downloads
   signaling:
     build: ../../services/signaling-service
     image: remotebt/signaling:dev
