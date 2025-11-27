@@ -20,13 +20,19 @@ services:
       - "5555:5555"
     env_file:
       - ./.env
-    environment:
-      - LOG_LEVEL=info # Set to 'debug' for verbose logs, 'info' for production
-    logging:
-      driver: "json-file"
-      options:
-        max-size: "10m"
-        max-file: "3"
+  volumes:
+    # Map thư mục certs (cùng cấp docker-compose.yml) vào trong container
+    - ./certs:/app/certs
+  environment:
+    - LOG_LEVEL=info
+    # Chỉ định đường dẫn tuyệt đối BÊN TRONG container
+    - SSL_KEY_PATH=/app/certs/private-key.pem
+    - SSL_CERT_PATH=/app/certs/public-cert.pem
+  logging:
+    driver: "json-file"
+    options:
+      max-size: "10m"
+      max-file: "3"
 
   gateway:
     image: caddy:2-alpine

@@ -38,6 +38,9 @@
     console.log("Settings clicked");
     // TODO: Open settings modal
     alert("Settings - Coming Soon!");
+
+    //do phan giai
+    //chuc nang nang cao
   });
 
   document.getElementById("logout").addEventListener("click", function (e) {
@@ -94,7 +97,24 @@
       errorBox.style.display = "none";
       errorBox.textContent = "";
     }
+    // --- BẮT ĐẦU ĐOẠN VALIDATE
 
+    // 1. Kiểm tra rỗng (phòng trường hợp HTML xóa mất chữ required)
+    if (!email) {
+      errorBox.textContent = "Vui lòng nhập địa chỉ email!";
+      errorBox.style.display = "block";
+      return; // Dừng lại ngay, không fetch nữa
+    }
+
+    // 2. Kiểm tra định dạng Email (Regex đơn giản)
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(email)) {
+      errorBox.textContent = "Email không hợp lệ (Ví dụ: ten@gmail.com)";
+      errorBox.style.display = "block";
+      return;
+    }
+
+    // --- KẾT THÚC ĐOẠN VALIDATE ---
     try {
       const token = localStorage.getItem("auth_token");
       const response = await fetch(`${APP_CONFIG.AUTH_BASE}/api/hosts`, {

@@ -9,6 +9,8 @@ RUN npm ci --only=production || npm ci
 # Copy source
 COPY . .
 
+RUN mkdir -p /app/certs
+
 # Default WS port inside container (can be overridden by env)
 ENV WS_PORT=8080
 EXPOSE 8080 5555
