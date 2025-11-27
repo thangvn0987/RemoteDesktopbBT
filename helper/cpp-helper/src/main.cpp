@@ -39,7 +39,18 @@ static void sleep_ms(int ms){ std::this_thread::sleep_for(std::chrono::milliseco
 
 // ---------------- Utility ----------------
 static std::vector<std::string> split_ws(const std::string &line){ std::istringstream iss(line); std::vector<std::string> out; std::string w; while(iss>>w) out.push_back(w); return out; }
-static std::wstring utf8_to_wide(const std::string &s){ if(s.empty()) return L""; int len=MultiByteToWideChar(CP_UTF8,0,s.c_str(),-1,nullptr,0); std::wstring w; w.resize(len?len-1:0); if(len>0) MultiByteToWideChar(CP_UTF8,0,s.c_str(),-1,w.data(),len); return w; }
+
+// --- CODE ĐÚNG ---
+static std::wstring utf8_to_wide(const std::string &s){ 
+    if(s.empty()) return L""; 
+    int len=MultiByteToWideChar(CP_UTF8,0,s.c_str(),-1,nullptr,0); 
+    std::wstring w; 
+    w.resize(len?len-1:0); 
+    // Sửa w.data() thành &w[0] để cho phép ghi dữ liệu
+    if(len>0) MultiByteToWideChar(CP_UTF8,0,s.c_str(),-1,&w[0],len); 
+    return w; 
+}
+
 static std::string join_from(const std::vector<std::string>&v,size_t i){ std::string o; for(size_t k=i;k<v.size();++k){ if(k>i) o.push_back(' '); o+=v[k]; } return o; }
 
 // ---------------- Input (Win32) ----------------
