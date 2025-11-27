@@ -10,6 +10,9 @@ import jwt from "jsonwebtoken";
 import express from "express";
 import http from "http";
 import { v4 as uuidv4 } from "uuid";
+//chuyen thuan tcp sang tls
+import tls from "tls";
+import fs from "fs";
 
 // Prefer WS_PORT/SIGNING_SECRET but remain backward-compatible with SIGNALING_* names used in infra .env
 const WS_PORT = process.env.WS_PORT
@@ -40,8 +43,7 @@ const activeConnections = new Set();
 const MAX_CONNECTIONS = 10;
 const MAX_PENDING = 3; // Max queued frames per client
 
-// TCP server that accepts a single helper connection
-const helperServer = net.createServer((socket) => {
+const connectionHandler = (socket) => {
   if (helperSocket) {
     console.warn("[helper] rejecting extra connection (already connected)");
     try {
@@ -245,7 +247,48 @@ const helperServer = net.createServer((socket) => {
       broadcastHelperReady();
     }
   });
-});
+};
+
+// const helperServer = net.createServer(connectionHandler);
+
+//kich hoat ssl/tls
+
+let helperServer;
+const sslKeyPath = process.env.SSL_KEY_PATH;
+const sslCertPath = process.env.SSL_CERT_PATH;
+
+// Kiểm tra xem có đường dẫn file và file có tồn tại thật không
+if (
+  sslKeyPath &&
+  sslCertPath &&
+  fs.existsSync(sslKeyPath) &&
+  fs.existsSync(sslCertPath)
+) {
+  console.log(
+    `[helper] 🔒 Found SSL certs at ${sslKeyPath}. Starting TLS Secure Server...`
+  );
+
+  try {
+    const options = {
+      key: fs.readFileSync(sslKeyPath),
+      cert: fs.readFileSync(sslCertPath),
+      // Cho phép client (helper) kết nối mà không cần chứng chỉ client
+      requestCert: false,
+      rejectUnauthorized: false,
+    };
+
+    // Tạo server bảo mật (TLS)
+    helperServer = tls.createServer(options, connectionHandler);
+  } catch (error) {
+    console.error(`[helper] ❌ Error loading SSL certs: ${error.message}`);
+    console.warn("[helper] ⚠️ Falling back to insecure TCP server.");
+    helperServer = net.createServer(connectionHandler);
+  }
+} else {
+  // Nếu không tìm thấy file chứng chỉ (môi trường Dev cũ) thì chạy TCP thường
+  console.log("[helper] ⚠️ No SSL certs found. Starting standard TCP Server.");
+  helperServer = net.createServer(connectionHandler);
+}
 
 helperServer.listen(HELPER_PORT, HELPER_HOST, () => {
   console.log(`[helper] listening on ${HELPER_HOST}:${HELPER_PORT}`);

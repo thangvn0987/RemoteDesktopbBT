@@ -10,6 +10,13 @@
 #  include <gdiplus.h>
 #  pragma comment(lib, "Gdiplus.lib")
 #  pragma comment(lib, "Ws2_32.lib")
+//bao mat
+#define SECURITY_WIN32
+#include <security.h>
+#include <schannel.h>
+#include <sspi.h>
+
+#pragma comment(lib, "Secur32.lib")
 #else
 #  error "Windows only prototype"
 #endif
@@ -150,6 +157,215 @@ static std::thread g_capture_thread;
 static std::mutex g_send_mx;
 static SOCKET g_client_sock = INVALID_SOCKET;
 
+//baomat tcp tls
+// Lớp bao đóng (Wrapper) cho Windows SChannel (TLS 1.2/1.3)
+// Giúp mã hóa/giải mã dữ liệu mà không cần OpenSSL
+class SimpleTls {
+    CredHandle hCred;
+    CtxtHandle hCtxt;
+    bool haveCred = false;
+    bool haveCtxt = false;
+    bool secureReady = false;
+    SOCKET sock = INVALID_SOCKET;
+    std::vector<char> incomingBuf;  // Bộ đệm nhận dữ liệu thô từ mạng
+    std::vector<char> decryptedBuf; // Bộ đệm dữ liệu đã giải mã
+
+public:
+    SimpleTls() {
+        incomingBuf.reserve(16384);
+        decryptedBuf.reserve(16384);
+    }
+
+    ~SimpleTls() { Cleanup(); }
+
+    void Cleanup() {
+        if (haveCtxt) { DeleteSecurityContext(&hCtxt); haveCtxt = false; }
+        if (haveCred) { FreeCredentialsHandle(&hCred); haveCred = false; }
+        // Lưu ý: Class này không đóng socket, việc đó do Tcp struct quản lý
+        secureReady = false;
+        sock = INVALID_SOCKET;
+    }
+
+    // Thực hiện bắt tay (Handshake) với Server
+    bool Handshake(SOCKET s, const std::string& host) {
+        sock = s;
+        SCHANNEL_CRED credData = { 0 };
+        credData.dwVersion = SCHANNEL_CRED_VERSION;
+        // QUAN TRỌNG: Cờ này giúp bỏ qua lỗi chứng chỉ tự ký (Self-signed)
+        credData.dwFlags = SCH_CRED_NO_DEFAULT_CREDS | SCH_CRED_MANUAL_CRED_VALIDATION | SCH_CRED_IGNORE_NO_REVOCATION_CHECK | SCH_CRED_IGNORE_REVOCATION_OFFLINE;
+        credData.grbitEnabledProtocols = SP_PROT_TLS1_2_CLIENT | SP_PROT_TLS1_3_CLIENT;
+
+        TimeStamp ts;
+        if (AcquireCredentialsHandleA(NULL, (LPSTR)UNISP_NAME_A, SECPKG_CRED_OUTBOUND, NULL, &credData, NULL, NULL, &hCred, &ts) != SEC_E_OK) {
+            std::fprintf(stderr, "[TLS] AcquireCredentialsHandle failed\n");
+            return false;
+        }
+        haveCred = true;
+
+        DWORD sspiFlags = ISC_REQ_SEQUENCE_DETECT | ISC_REQ_REPLAY_DETECT | ISC_REQ_CONFIDENTIALITY | ISC_REQ_STREAM | ISC_REQ_MANUAL_CRED_VALIDATION;
+        SecBufferDesc outDesc, inDesc;
+        SecBuffer outSec[1], inSec[2];
+        unsigned long ctxAttr;
+
+        bool loop = true;
+        while (loop) {
+            outSec[0] = { 0, SECBUFFER_TOKEN, NULL };
+            outDesc = { SECBUFFER_VERSION, 1, outSec };
+            
+            inSec[0] = { (unsigned long)incomingBuf.size(), SECBUFFER_TOKEN, incomingBuf.data() };
+            inSec[1] = { 0, SECBUFFER_EMPTY, NULL };
+            inDesc = { SECBUFFER_VERSION, 2, inSec };
+
+            SECURITY_STATUS scRet = InitializeSecurityContextA(&hCred, haveCtxt ? &hCtxt : NULL, (SEC_CHAR*)host.c_str(), sspiFlags, 0, 0, incomingBuf.empty() ? NULL : &inDesc, 0, &hCtxt, &outDesc, &ctxAttr, &ts);
+            haveCtxt = true;
+
+            if (inSec[1].BufferType == SECBUFFER_EXTRA) {
+                // Di chuyển phần dữ liệu thừa lên đầu buffer
+                size_t consumed = incomingBuf.size() - inSec[1].cbBuffer;
+                memmove(incomingBuf.data(), incomingBuf.data() + consumed, inSec[1].cbBuffer);
+                incomingBuf.resize(inSec[1].cbBuffer);
+            }
+            else if (scRet != SEC_E_INCOMPLETE_MESSAGE) {
+                incomingBuf.clear();
+            }
+
+            if (scRet == SEC_E_OK || scRet == SEC_I_CONTINUE_NEEDED) {
+                if (outSec[0].cbBuffer > 0 && outSec[0].pvBuffer) {
+                    send(sock, (char*)outSec[0].pvBuffer, outSec[0].cbBuffer, 0);
+                    FreeContextBuffer(outSec[0].pvBuffer);
+                }
+                if (scRet == SEC_E_OK) {
+                    secureReady = true;
+                    loop = false;
+                }
+                else {
+                    // Cần thêm dữ liệu từ server để tiếp tục handshake
+                    char tBuf[4096];
+                    int n = recv(sock, tBuf, sizeof(tBuf), 0);
+                    if (n <= 0) return false;
+                    incomingBuf.insert(incomingBuf.end(), tBuf, tBuf + n);
+                }
+            }
+            else if (scRet == SEC_E_INCOMPLETE_MESSAGE) {
+                char tBuf[4096];
+                int n = recv(sock, tBuf, sizeof(tBuf), 0);
+                if (n <= 0) return false;
+                incomingBuf.insert(incomingBuf.end(), tBuf, tBuf + n);
+            }
+            else {
+                std::fprintf(stderr, "[TLS] Handshake failed: 0x%x\n", scRet);
+                return false;
+            }
+        }
+        return true;
+    }
+
+    // Gửi dữ liệu (Mã hóa trước khi gửi)
+    int Send(const char* data, int len) {
+        if (!secureReady) return send(sock, data, len, 0);
+
+        SecPkgContext_StreamSizes sizes;
+        QueryContextAttributes(&hCtxt, SECPKG_ATTR_STREAM_SIZES, &sizes);
+
+        std::vector<char> msg(sizes.cbHeader + len + sizes.cbTrailer);
+        SecBuffer buffers[4];
+        buffers[0] = { sizes.cbHeader, SECBUFFER_STREAM_HEADER, msg.data() };
+        buffers[1] = { (unsigned long)len, SECBUFFER_DATA, msg.data() + sizes.cbHeader };
+        memcpy(buffers[1].pvBuffer, data, len);
+        buffers[2] = { sizes.cbTrailer, SECBUFFER_STREAM_TRAILER, msg.data() + sizes.cbHeader + len };
+        buffers[3] = { 0, SECBUFFER_EMPTY, NULL };
+        SecBufferDesc desc = { SECBUFFER_VERSION, 4, buffers };
+
+        if (EncryptMessage(&hCtxt, 0, &desc, 0) != SEC_E_OK) return -1;
+        
+        int total = buffers[0].cbBuffer + buffers[1].cbBuffer + buffers[2].cbBuffer;
+        return send(sock, msg.data(), total, 0);
+    }
+    
+    // Nhận dữ liệu (Nhận và Giải mã)
+    int Recv(char* buf, int maxLen) {
+        if (!secureReady) return recv(sock, buf, maxLen, 0);
+
+        // Nếu còn dữ liệu đã giải mã trong buffer, trả về ngay
+        if (!decryptedBuf.empty()) {
+            int toCopy = std::min(maxLen, (int)decryptedBuf.size());
+            memcpy(buf, decryptedBuf.data(), toCopy);
+            if (toCopy < decryptedBuf.size()) {
+                memmove(decryptedBuf.data(), decryptedBuf.data() + toCopy, decryptedBuf.size() - toCopy);
+                decryptedBuf.resize(decryptedBuf.size() - toCopy);
+            } else {
+                decryptedBuf.clear();
+            }
+            return toCopy;
+        }
+
+        // Đọc từ mạng và giải mã
+        while (true) {
+            if (incomingBuf.empty()) {
+                char tBuf[4096];
+                int n = recv(sock, tBuf, sizeof(tBuf), 0);
+                if (n <= 0) return n;
+                incomingBuf.insert(incomingBuf.end(), tBuf, tBuf + n);
+            }
+
+            SecBuffer buffers[4];
+            buffers[0] = { (unsigned long)incomingBuf.size(), SECBUFFER_DATA, incomingBuf.data() };
+            buffers[1] = { 0, SECBUFFER_EMPTY, NULL };
+            buffers[2] = { 0, SECBUFFER_EMPTY, NULL };
+            buffers[3] = { 0, SECBUFFER_EMPTY, NULL };
+            SecBufferDesc desc = { SECBUFFER_VERSION, 4, buffers };
+
+            SECURITY_STATUS scRet = DecryptMessage(&hCtxt, &desc, 0, NULL);
+
+            if (scRet == SEC_E_OK || scRet == SEC_I_RENEGOTIATE) {
+                // Tìm buffer chứa dữ liệu thật (DATA)
+                for (int i = 1; i < 4; i++) {
+                    if (buffers[i].BufferType == SECBUFFER_DATA) {
+                        decryptedBuf.insert(decryptedBuf.end(), (char*)buffers[i].pvBuffer, (char*)buffers[i].pvBuffer + buffers[i].cbBuffer);
+                    }
+                }
+                // Xử lý dữ liệu thừa (EXTRA) cho lần sau
+                for (int i = 1; i < 4; i++) {
+                    if (buffers[i].BufferType == SECBUFFER_EXTRA) {
+                        size_t consumed = incomingBuf.size() - buffers[i].cbBuffer;
+                        memmove(incomingBuf.data(), incomingBuf.data() + consumed, buffers[i].cbBuffer);
+                        incomingBuf.resize(buffers[i].cbBuffer);
+                        goto CheckData;
+                    }
+                }
+                incomingBuf.clear();
+
+            CheckData:
+                if (!decryptedBuf.empty()) {
+                    int toCopy = std::min(maxLen, (int)decryptedBuf.size());
+                    memcpy(buf, decryptedBuf.data(), toCopy);
+                    if (toCopy < decryptedBuf.size()) {
+                        memmove(decryptedBuf.data(), decryptedBuf.data() + toCopy, decryptedBuf.size() - toCopy);
+                        decryptedBuf.resize(decryptedBuf.size() - toCopy);
+                    } else {
+                        decryptedBuf.clear();
+                    }
+                    return toCopy;
+                }
+            }
+            else if (scRet == SEC_E_INCOMPLETE_MESSAGE) {
+                // Cần nhận thêm dữ liệu
+                char tBuf[4096];
+                int n = recv(sock, tBuf, sizeof(tBuf), 0);
+                if (n <= 0) return n;
+                incomingBuf.insert(incomingBuf.end(), tBuf, tBuf + n);
+            }
+            else {
+                return -1; // Lỗi
+            }
+        }
+    }
+};
+
+// Biến toàn cục để hàm gửi ảnh (send_frame_over_tcp) có thể truy cập TLS
+static SimpleTls* g_active_tls = nullptr;
+//ketthuc phan bao mat
+
 // base64 encoder
 static const char* B64TAB = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
 static std::string base64_encode(const unsigned char* data, size_t len){
@@ -230,13 +446,29 @@ static bool get_jpeg_bytes(std::vector<unsigned char>& out, int &outW, int &outH
 	return !out.empty();
 }
 
+// --- Thay thế hàm send_frame_over_tcp cũ bằng ưu tiên dùng tcp ---
+
 static void send_frame_over_tcp(const std::string &b64, int w, int h){
-	if(g_client_sock==INVALID_SOCKET) return;
-	std::lock_guard<std::mutex> lk(g_send_mx);
-	std::string header = "FRAME "+std::to_string(b64.size())+" "+std::to_string(w)+"x"+std::to_string(h)+"\n";
-	send(g_client_sock, header.c_str(), (int)header.size(), 0);
-	send(g_client_sock, b64.c_str(), (int)b64.size(), 0);
-	const char nl='\n'; send(g_client_sock, &nl, 1, 0);
+    // Nếu không có kết nối nào thì thoát
+    if(g_client_sock==INVALID_SOCKET) return;
+
+    std::lock_guard<std::mutex> lk(g_send_mx);
+    std::string header = "FRAME "+std::to_string(b64.size())+" "+std::to_string(w)+"x"+std::to_string(h)+"\n";
+    
+    // [ĐIỂM KHÁC BIỆT]: Kiểm tra xem có đang dùng TLS không?
+    if (g_active_tls) {
+        // Có TLS -> Gửi mã hóa
+        g_active_tls->Send(header.c_str(), (int)header.size());
+        g_active_tls->Send(b64.c_str(), (int)b64.size());
+        const char nl='\n'; 
+        g_active_tls->Send(&nl, 1);
+    } else {
+        // Không TLS -> Gửi thường (như code cũ)
+        send(g_client_sock, header.c_str(), (int)header.size(), 0);
+        send(g_client_sock, b64.c_str(), (int)b64.size(), 0);
+        const char nl='\n'; 
+        send(g_client_sock, &nl, 1, 0);
+    }
 }
 
 static void capture_loop(){
@@ -631,68 +863,100 @@ int main(int argc,char **argv){
 		return 0; 
 	}
 
-	// forward declare run_agent with reconnect
-	auto run_agent = [&](const std::string &h,uint16_t p)->int{
-		if(!Tcp::init()){ std::fprintf(stderr,"WSA init failed\n"); return 1; }
-		int attempt=0; 
-		bool stop=false; 
-		while(!stop){
-			Tcp cli; 
-			if(!tcp_connect(h,p,cli)){
-				long err = GetLastError();
-				int delay = std::min(30000, (1<<std::min(attempt,10)) * 250); // 250ms, 500ms, 1s, 2s... up to ~30s
-				std::fprintf(stderr,"[agent] connect failed %s:%u (err=%ld), retry in %d ms\n", h.c_str(), p, err, delay);
-				sleep_ms(delay); attempt++; continue;
-			}
-			attempt=0; g_client_sock = cli.s;
-			// authenticate TO server (signaling)
-			{
-				std::string line = std::string("AUTH ")+TOKEN+"\n";
-				tcp_send(cli, line);
-			}
-			// Send initial geometry metadata so controller can map coordinates precisely
-			{
-				g_vx = GetSystemMetrics(SM_XVIRTUALSCREEN);
-				g_vy = GetSystemMetrics(SM_YVIRTUALSCREEN);
-				g_vw = GetSystemMetrics(SM_CXVIRTUALSCREEN);
-				g_vh = GetSystemMetrics(SM_CYVIRTUALSCREEN);
-				char bufGeom[128];
-				std::snprintf(bufGeom, sizeof(bufGeom), "GEOM %d %d %d %d\n", g_vx, g_vy, g_vw, g_vh);
-				tcp_send(cli, bufGeom);
-			}
-			std::string acc; 
-			acc.reserve(4096); 
-			char buf[1024]; 
-			bool authed=true;
-			while(true){ 
-				int n=tcp_recv(cli,buf,sizeof(buf)); 
-				if(n<=0) break; 
-				for(int i=0;i<n;++i){ 
-					char ch=buf[i]; 
-					if(ch=='\n'){ 
-						bool cont=handle_command(acc,authed); 
-						acc.clear(); 
-						if(!cont){ 
-							stop=true; 
-							break; 
-						} 
-					} else if(ch!='\r'){ 
-						acc.push_back(ch);
-					} 
-				} if(stop) break; 
-			}
-			// connection closed: ensure capture thread stopped
-			if(g_capture){ 
-				g_capture=false; 
-				if(g_capture_thread.joinable()) g_capture_thread.join(); 
-			}
-			g_client_sock=INVALID_SOCKET; 
-			cli.close(); 
-			if(stop) break; // else reconnect
-		}
-		Tcp::done(); 
-		return 0; 
-	};
+	// forward declare run_agent with reconnect + bao mat tcp
+
+	// --- [BƯỚC 4] THAY THẾ TOÀN BỘ KHỐI auto run_agent BẰNG ĐOẠN NÀY ---
+    auto run_agent = [&](const std::string &h,uint16_t p)->int{
+        if(!Tcp::init()){ std::fprintf(stderr,"WSA init failed\n"); return 1; }
+        int attempt=0; 
+        bool stop=false; 
+        
+        while(!stop){
+            Tcp cli; 
+            SimpleTls tls; // <--- Đối tượng xử lý mã hóa
+            
+            // 1. Kết nối TCP
+            if(!tcp_connect(h,p,cli)){
+                long err = GetLastError();
+                int delay = std::min(30000, (1<<std::min(attempt,10)) * 250); 
+                std::fprintf(stderr,"[agent] connect failed %s:%u (err=%ld), retry in %d ms\n", h.c_str(), p, err, delay);
+                sleep_ms(delay); attempt++; continue;
+            }
+
+            // 2. Bắt tay TLS (Handshake)
+            std::printf("[agent] Performing TLS handshake...\n");
+            if (!tls.Handshake(cli.s, h)) {
+                std::fprintf(stderr, "[agent] TLS Handshake failed! (Check certs or server logs)\n");
+                cli.close();
+                sleep_ms(2000); attempt++; continue;
+            }
+            std::printf("[agent] 🔒 TLS Secure Connection Established!\n");
+            
+            // 3. Cập nhật trạng thái toàn cục
+            attempt=0; 
+            g_client_sock = cli.s; 
+            g_active_tls = &tls; // <--- Kích hoạt gửi ảnh qua TLS
+
+            // authenticate TO server
+            {
+                std::string line = std::string("AUTH ")+TOKEN+"\n";
+                tls.Send(line.c_str(), (int)line.size());
+            }
+            
+            // Send initial geometry
+            {
+                g_vx = GetSystemMetrics(SM_XVIRTUALSCREEN);
+                g_vy = GetSystemMetrics(SM_YVIRTUALSCREEN);
+                g_vw = GetSystemMetrics(SM_CXVIRTUALSCREEN);
+                g_vh = GetSystemMetrics(SM_CYVIRTUALSCREEN);
+                char bufGeom[128];
+                std::snprintf(bufGeom, sizeof(bufGeom), "GEOM %d %d %d %d\n", g_vx, g_vy, g_vw, g_vh);
+                tls.Send(bufGeom, (int)strlen(bufGeom));
+            }
+
+            std::string acc; 
+            acc.reserve(4096); 
+            char buf[4096]; 
+            bool authed=true;
+            
+            while(true){ 
+                // 4. Nhận dữ liệu qua TLS (thay vì tcp_recv)
+                int n = tls.Recv(buf,sizeof(buf)); 
+                
+                if(n<=0) break; 
+                for(int i=0;i<n;++i){ 
+                    char ch=buf[i]; 
+                    if(ch=='\n'){ 
+                        bool cont=handle_command(acc,authed); 
+                        acc.clear(); 
+                        if(!cont){ 
+                            stop=true; 
+                            break; 
+                        } 
+                    } else if(ch!='\r'){ 
+                        acc.push_back(ch);
+                    } 
+                } 
+                if(stop) break; 
+            }
+            
+            // Dọn dẹp khi mất kết nối
+            if(g_capture){ 
+                g_capture=false; 
+                if(g_capture_thread.joinable()) g_capture_thread.join(); 
+            }
+            
+            g_active_tls = nullptr; // <--- Hủy trạng thái TLS
+            g_client_sock=INVALID_SOCKET; 
+            cli.close(); 
+            
+            if(stop) break; 
+        }
+        Tcp::done(); 
+        return 0; 
+    };
+    // -------------------------------------------------------------------
+	
 
 	int rc = isServer? run_server(port) : (isClient? run_client(host,port,demo) : (isConfig? run_config_server(configPort) : run_agent(host,port)));
 	Gdiplus::GdiplusShutdown(gdipToken);
